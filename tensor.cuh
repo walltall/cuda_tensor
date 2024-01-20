@@ -27,7 +27,6 @@ namespace ts {
     private:
         std::string message;
     public:
-
         IndexError(std::string message){
             this->message = message;
         }
@@ -158,10 +157,12 @@ namespace ts {
 
         int init(T data, size_t offset){
             if(offset == 0){
-                std::shared_ptr<T> tmp(new T[this->size](), std::default_delete<T[]>());
-                this->data = tmp;
+                this->data.resize(this->size);
+                for (size_t i = 0; i < this->size; ++i) {
+                    this->data[i] = std::make_shared<T>(T());
+                }
             }
-            this->data.get()[offset/sizeof(T)] = data;
+            *(this->data[offset / sizeof(T)]) = data;
             return 1;
         }
 
@@ -171,7 +172,8 @@ namespace ts {
                 totalSize *= dim;
             }
             for (size_t i = 0; i < totalSize; ++i) {
-                this->data.get()[i] = std::rand() % 100;
+                this->data[i] = std::make_shared<T>(T());
+                *(this->data[i].get()) = std::rand() % 100;
             }
         }
 
@@ -184,14 +186,14 @@ namespace ts {
 
             for (size_t i = 0; i < totalSize; ++i) {
                 float r = 0 + static_cast <float> (std::rand()) /( static_cast <float> (RAND_MAX/(100 - 0)));
-                this->data.get()[i] = r;
+                this->data[i] = std::make_shared<T>(T());
+                *(this->data[i].get()) = r;
             }
         }
 
     public:
-        std::shared_ptr<T> data;
+        std::vector<std::shared_ptr<T>> data;
         Tensor() = default;
-
         std::vector<size_t> get_shape()const{
             return shape;
         }
@@ -216,8 +218,11 @@ namespace ts {
             std::reverse(this->strides.begin(),this->strides.end());
         }
 
-        Tensor(std::shared_ptr<T> data, size_t size, const std::vector<size_t>& dimensions) {
-            this->data = data;
+        Tensor(std::vector<std::shared_ptr<T>> data, size_t size, const std::vector<size_t>& dimensions) {
+            this->data.resize(size);
+            for(int i = 0; i < size; i++){
+                this->data[i] = data[i];
+            }
             this->size = size;
             this->shape = dimensions;
 
@@ -235,9 +240,11 @@ namespace ts {
             this->strides = other.strides;
             this->size = other.size;
             this->dims = other.dims;
-            std::shared_ptr<T> tmp(new T[this->size](), std::default_delete<T[]>());
-            this->data = tmp;
-            for(int i = 0; i < this->size; i++) this->data.get()[i] = other.data.get()[i];
+            this->data.resize(this->size);
+            for(int i = 0; i < this->size; i++) {
+                this->data[i] = std::make_shared<T>(T());
+                *(this->data[i].get()) = *(other.data[i].get());
+            }
         }
 
         static Tensor<T> rand(const std::vector<size_t>& dimensions) {
@@ -249,8 +256,7 @@ namespace ts {
                 totalSize *= dim;
             }
             randomTensor.size = totalSize;
-            std::shared_ptr<T> tmp(new T[totalSize](), std::default_delete<T[]>());
-            randomTensor.data = tmp;
+            randomTensor.data.resize(totalSize);
             if (std::is_integral<T>::value) {
                 randomTensor.randInt(dimensions);
             } else if (std::is_floating_point<T>::value) {
@@ -278,9 +284,11 @@ namespace ts {
                 totalSize *= dim;
             }
             zeroTensor.size = totalSize;
-            std::shared_ptr<T> tmp(new T[totalSize](), std::default_delete<T[]>());
-            zeroTensor.data = tmp;
-            for(int i = 0; i < totalSize; i++) zeroTensor.data.get()[i] = 0;
+            zeroTensor.data.resize(totalSize);
+            for(int i = 0; i < totalSize; i++) {
+                zeroTensor.data[i] = std::make_shared<T>(T());
+                *(zeroTensor.data[i].get()) = 0;
+            }
 
             size_t stride = sizeof(T);
             zeroTensor.dims = dimensions.size();
@@ -304,9 +312,12 @@ namespace ts {
             }
             oneTensor.size = totalSize;
 
-            std::shared_ptr<T> tmp(new T[totalSize](), std::default_delete<T[]>());
-            oneTensor.data = tmp;
-            for(int i = 0; i < totalSize; i++) oneTensor.data.get()[i] = 1;
+
+            oneTensor.data.resize(totalSize);
+            for(int i = 0; i < totalSize; i++) {
+                oneTensor.data[i] = std::make_shared<T>(T());
+                *(oneTensor.data[i].get()) = 1;
+            }
 
             size_t stride = sizeof(T);
             oneTensor.dims = dimensions.size();
@@ -329,9 +340,11 @@ namespace ts {
                 totalSize *= dim;
             }
             fullTensor.size = totalSize;
-            std::shared_ptr<T> tmp(new T[totalSize](), std::default_delete<T[]>());
-            fullTensor.data = tmp;
-            for(int i = 0; i < totalSize; i++) fullTensor.data.get()[i] = value;
+            fullTensor.data.resize(totalSize);
+            for(int i = 0; i < totalSize; i++) {
+                fullTensor.data[i] = std::make_shared<T>(T());
+                *(fullTensor.data[i].get()) = value;
+            }
 
             size_t stride = sizeof(T);
             fullTensor.dims = dimensions.size();
@@ -355,11 +368,15 @@ namespace ts {
                 totalSize *= dim;
             }
             eyeTensor.size = totalSize;
-            std::shared_ptr<T> tmp(new T[totalSize](), std::default_delete<T[]>());
-            eyeTensor.data = tmp;
+            eyeTensor.data.resize(totalSize);
             for (size_t i = 0; i < totalSize; ++i) {
-                if(i / row == i % row) eyeTensor.data.get()[i] = 1;
-                else eyeTensor.data.get()[i] = 0;
+                if(i / row == i % row) {
+                    eyeTensor.data[i] = std::make_shared<T>(T());
+                    *(eyeTensor.data[i].get()) = 1;
+                } else {
+                    eyeTensor.data[i] = std::make_shared<T>(T());
+                    *(eyeTensor.data[i].get()) = 0;
+                }
             }
 
             size_t stride = sizeof(T);
@@ -374,47 +391,41 @@ namespace ts {
             return eyeTensor;
         }
 
-//        static Tensor<T> diagonal(const Tensor<T>& input, int offset = 0) {
-//            size_t inputDims = input.dims;
-//            if (inputDims < 2) {
-//                throw std::runtime_error("输入的tensor至少包含两个维度");
-//            }
-//
-//            size_t rows = input.shape[inputDims - 2];
-//            size_t cols = input.shape[inputDims - 1];
-//
-//            if (offset > 0) {
-//                size_t diagSize = std::min(rows, cols - offset);
-//                std::vector<size_t> diagShape = { diagSize };
-//                Tensor<T> diagTensor = Tensor<T>::zeros(diagShape);
-//
-//                for (size_t i = 0; i < diagSize; ++i) {
-//                    diagTensor.data.get()[i] = input.data.get()[i * input.strides[inputDims - 2] + (i + offset) * input.strides[inputDims - 1]];
-//                }
-//
-//                return diagTensor;
-//            } else if (offset < 0) {
-//                size_t diagSize = std::min(rows + offset, cols);
-//                std::vector<size_t> diagShape = { diagSize };
-//                Tensor<T> diagTensor = Tensor<T>::zeros(diagShape);
-//
-//                for (size_t i = 0; i < diagSize; ++i) {
-//                    diagTensor.data.get()[i] = input.data.get()[(i - offset) * input.strides[inputDims - 2] + i * input.strides[inputDims - 1]];
-//                }
-//
-//                return diagTensor;
-//            } else {
-//                size_t diagSize = std::min(rows, cols);
-//                std::vector<size_t> diagShape = { diagSize };
-//                Tensor<T> diagTensor = Tensor<T>::zeros(diagShape);
-//
-//                for (size_t i = 0; i < diagSize; ++i) {
-//                    diagTensor.data.get()[i] = input.data.get()[i * input.strides[inputDims - 2] + i * input.strides[inputDims - 1]];
-//                }
-//
-//                return diagTensor;
-//            }
-//        }
+        static Tensor<T> empty(const std::vector<size_t>& dimensions) {
+            Tensor<T> emptyTensor;
+            emptyTensor.shape = dimensions;
+
+            size_t totalSize = 1;
+            for (size_t dim : emptyTensor.shape) {
+                totalSize *= dim;
+            }
+            emptyTensor.size = totalSize;
+            emptyTensor.data.resize(totalSize);
+            for(int i = 0; i < totalSize; i++) {
+                emptyTensor.data[i] = std::make_shared<T>(T());
+            }
+
+            size_t stride = sizeof(T);
+            emptyTensor.dims = dimensions.size();
+            emptyTensor.strides.resize(emptyTensor.dims);
+
+            for (size_t i = 0; i < emptyTensor.dims; ++i) {
+                totalSize /= dimensions[i];
+                emptyTensor.strides[i] = totalSize;
+            }
+            return emptyTensor;
+        }
+
+        static Tensor<T> logspace(double start, double end, int steps, double base = 10){
+            if(typeid(T) != typeid(double)) throw ExpressionNotSupportedError("ExpressionNotSupportedError: The function can only create double tensor");
+            Tensor<T> tensor = empty({steps});
+            double stride = (end - start) / (steps - 1);
+            for(int i = 0; i < steps; i++){
+                double cur = pow(base, start + i * stride);
+                *(tensor.data[i].get()) = cur;
+            }
+            return tensor;
+        }
 
 
         Tensor<T> operator()(size_t index) {
@@ -425,7 +436,12 @@ namespace ts {
             for(int i = 1; i < this->dims; i++) dimensions.push_back(this->shape[i]);
             if(dimensions.empty()) dimensions.push_back(1);
             int indexSize = this->size / shape[0];
-            std::shared_ptr<T> indexData(this->data, this->data.get() + index * this->strides[0]);
+            std::vector<std::shared_ptr<T>> indexData;
+            int base = index * this->strides[0];
+            for(int i = 0; i < strides[0]; i++) {
+                std::shared_ptr<T> ptr = this->data[base + i];
+                indexData.push_back(ptr);
+            }
             Tensor<T> indexT(indexData, indexSize, dimensions);
             return indexT;
         }
@@ -442,7 +458,12 @@ namespace ts {
                 dimensions.push_back(this->shape[i]);
             }
             sliceSize *= this->strides[1];
-            std::shared_ptr<T> sliceData(this->data, this->data.get() + location * this->strides[0] + startIndex * this->strides[1]);
+            std::vector<std::shared_ptr<T>> sliceData;
+            int base = location * this->strides[0] + startIndex * this->strides[1];
+            for(int i = 0; i < strides[0]; i++) {
+                std::shared_ptr<T> ptr = this->data[base + i];
+                sliceData.push_back(ptr);
+            }
             Tensor<T> spliceT(sliceData, sliceSize, dimensions);
             return spliceT;
         }
@@ -539,14 +560,14 @@ namespace ts {
             std::vector<size_t> xIndices(xDims, 0);  // 用于保存当前元素在 x 张量中的索引
             for (size_t i = 0; i < result.size; ++i) {
                 // 将对应位置的 x 元素赋值给 result
-                T value = x.data.get()[0];  // 默认使用 x 张量中的第一个元素
+                T value = *(x.data[0].get());  // 默认使用 x 张量中的第一个元素
                 for (int j = 0; j < xDims; ++j) {
                     if (xShape[j] > 1) {
-                        value = x.data.get()[xIndices[j]];  // 使用对应位置的 x 元素
+                        value = *(x.data[xIndices[j]].get());  // 使用对应位置的 x 元素
                         break;
                     }
                 }
-                result.data.get()[i] = value;
+                *(result.data[i].get()) = value;
 
                 // 更新 xIndices，以便获取下一个元素
                 for (int j = xDims - 1; j >= 0; --j) {
@@ -581,7 +602,7 @@ namespace ts {
             }
             Tensor<T> trans = Tensor<T>::zeros(newDimension);
             for(size_t i = 0; i < trans.size; i++){
-                std::shared_ptr<T> dst_ptr(trans.data, trans.data.get() + i);
+                std::shared_ptr<T> dst_ptr = trans.data[i];
                 size_t k = 0;
                 size_t src_index = 0;
                 size_t dst_index = i;
@@ -603,7 +624,7 @@ namespace ts {
                 for(size_t j = 0; j < coordinates.size(); j++){
                     src_index += coordinates[j] * tensors[k].strides[j];
                 }
-                std::shared_ptr<T> src_ptr(tensors[k].data, tensors[k].data.get() + src_index);
+                std::shared_ptr<T> src_ptr = tensors[k].data[src_index];
                 *dst_ptr = *src_ptr;
             }
 //            std::cout << trans << std::endl;
@@ -630,7 +651,7 @@ namespace ts {
             }
             Tensor<T> trans = Tensor<T>::zeros(newDimension);
             for (size_t i = 0; i < trans.size; ++i) {
-                std::shared_ptr<T> dst_ptr(trans.data, trans.data.get() + i);
+                std::shared_ptr<T> dst_ptr = trans.data[i];
                 size_t src_index = 0;
                 size_t dst_index = i;
                 for (size_t j = 0; j < trans.strides.size(); ++j) {
@@ -639,7 +660,7 @@ namespace ts {
                     coordinate %= tensor_copy.shape[j];
                     src_index += coordinate * tensor_copy.strides[j];
                 }
-                std::shared_ptr<T> src_ptr(tensor_copy.data, tensor_copy.data.get() + src_index);
+                std::shared_ptr<T> src_ptr = tensor_copy.data[src_index];
                 *dst_ptr = *src_ptr;
             }
             return trans;
@@ -654,7 +675,7 @@ namespace ts {
         void operator=(T scalar) {
             size_t length = this->shape.front();
             for (size_t i = 0; i < length; i++) {
-                std::shared_ptr<T> data_ptr(this->data, this->data.get() + i);
+                std::shared_ptr<T> data_ptr = this->data[i];
                 *data_ptr = scalar;
             }
         }
@@ -663,8 +684,8 @@ namespace ts {
         void operator=(Tensor<T> operand){
             size_t length = operand.shape.front();
             for(size_t i = 0; i < length; i++){
-                std::shared_ptr<T> dst_ptr(this->data, this->data.get() + i);
-                std::shared_ptr<T> src_ptr(operand.data, operand.data.get() + i);
+                std::shared_ptr<T> dst_ptr = this->data[i];
+                std::shared_ptr<T> src_ptr = operand.data[i];
                 *dst_ptr = *src_ptr;
             }
         }
@@ -680,7 +701,7 @@ namespace ts {
             newDimension[dim2] = tensor.shape[dim1];
             Tensor<T> trans = Tensor<T>::zeros(newDimension);
             for(size_t i = 0; i < trans.size; i++) {
-                std::shared_ptr<T> src_ptr(tensor.data, tensor.data.get() + i);
+                std::shared_ptr<T> src_ptr = tensor.data[i];
                 size_t src_index = i;
                 size_t dst_index = 0;
                 for (size_t j = 0; j < tensor.strides.size(); ++j) {
@@ -694,7 +715,7 @@ namespace ts {
                         dst_index += coordinate * trans.strides[j];
                     }
                 }
-                std::shared_ptr<T> dst_ptr(trans.data, trans.data.get() + dst_index);
+                std::shared_ptr<T> dst_ptr = trans.data[dst_index];
                 *dst_ptr = *src_ptr;
             }
             return trans;
@@ -709,7 +730,7 @@ namespace ts {
             newDimension[dim2] = this->shape[dim1];
             Tensor<T> trans = Tensor<T>::zeros(newDimension);
             for(size_t i = 0; i < trans.size; i++) {
-                std::shared_ptr<T> src_ptr(this->data, this->data.get() + i);
+                std::shared_ptr<T> src_ptr = this->data[i];
                 size_t src_index = i;
                 size_t dst_index = 0;
                 for (size_t j = 0; j < this->strides.size(); ++j) {
@@ -723,7 +744,7 @@ namespace ts {
                         dst_index += coordinate * trans.strides[j];
                     }
                 }
-                std::shared_ptr<T> dst_ptr(trans.data, trans.data.get() + dst_index);
+                std::shared_ptr<T> dst_ptr = trans.data[dst_index];
                 *dst_ptr = *src_ptr;
             }
             return trans;
@@ -740,7 +761,7 @@ namespace ts {
             }
             Tensor<T> trans = Tensor<T>::zeros(newDimension);
             for(size_t i = 0; i < trans.size; i++) {
-                std::shared_ptr<T> dst_ptr(trans.data, trans.data.get() + i);
+                std::shared_ptr<T> dst_ptr = trans.data[i];
                 size_t src_index = 0;
                 size_t dst_index = i;
                 for (size_t j = 0; j < trans.strides.size(); ++j) {
@@ -748,7 +769,7 @@ namespace ts {
                     dst_index %= trans.strides[j];
                     src_index += coordinate * tensor.strides[dim[j]];
                 }
-                std::shared_ptr<T> src_ptr(tensor.data, tensor.data.get() + src_index);
+                std::shared_ptr<T> src_ptr = tensor.data[src_index];
                 *dst_ptr = *src_ptr;
             }
             return trans;
@@ -764,7 +785,7 @@ namespace ts {
             }
             Tensor<T> trans = Tensor<T>::zeros(newDimension);
             for(size_t i = 0; i < trans.size; i++) {
-                std::shared_ptr<T> dst_ptr(trans.data, trans.data.get() + i);
+                std::shared_ptr<T> dst_ptr = trans.data[i];
                 size_t src_index = 0;
                 size_t dst_index = i;
                 for (size_t j = 0; j < trans.strides.size(); ++j) {
@@ -772,7 +793,7 @@ namespace ts {
                     dst_index %= trans.strides[j];
                     src_index += coordinate * this->strides[dim[j]];
                 }
-                std::shared_ptr<T> src_ptr(this->data, this->data.get() + src_index);
+                std::shared_ptr<T> src_ptr = this->data[src_index];
                 *dst_ptr = *src_ptr;
             }
             return trans;
@@ -859,7 +880,7 @@ namespace ts {
             Tensor<T> other = *(processed.tensor2);
             Tensor<T> result = zeros(other.shape);
             for (size_t i = 0; i < result.size; ++i) {
-                result.data.get()[i] =input.data.get()[i] + static_cast<T>(other.data.get()[i]);
+                *(result.data[i]) = *(input.data[i]) + static_cast<T>(*other.data[i]);
             }
             return result;
         }
@@ -870,7 +891,7 @@ namespace ts {
             Tensor<T> other = *(processed.tensor2);
             Tensor<T> result = zeros(other.shape);
             for (size_t i = 0; i < result.size; ++i) {
-                result.data.get()[i] =input.data.get()[i] + static_cast<T>(other.data.get()[i]);
+                *(result.data[i]) = *(input.data[i]) + static_cast<T>(*(other.data[i]));
             }
             return result;
         }
@@ -884,7 +905,7 @@ namespace ts {
         static Tensor<T> add(const Tensor<T>&input,const T& value){
             Tensor<T> result = zeros(input->shape);
             for (size_t i = 0; i < result.size; ++i) {
-                result.data.get()[i]= input.data.get()[i]+ value;
+                *(result.data[i])= *(input.data[i])+ value;
             }
             return result;
         }
@@ -892,7 +913,7 @@ namespace ts {
         Tensor<T> add(const T& value) const {
             Tensor<T> result = zeros(this->shape);
             for (size_t i = 0; i < result.size; ++i) {
-                result.data.get()[i]= this->data.get()[i] + value;
+                *(result.data[i])= *(this->data[i]) + value;
             }
             return result;
         }
@@ -911,7 +932,7 @@ namespace ts {
             Tensor<T> other = *(processed.tensor2);
             Tensor<T> result = zeros(other.shape);
             for (size_t i = 0; i < result.size; ++i) {
-                result.data.get()[i]= input.data.get()[i]- static_cast<T>(other.data.get()[i]);
+                *(result.data[i]) = *(input.data[i]) - static_cast<T>(*(other.data[i]));
             }
             return result;
         }
@@ -922,7 +943,7 @@ namespace ts {
             Tensor<T> other = *(processed.tensor2);
             Tensor<T> result = zeros(other.shape);
             for (size_t i = 0; i < result.size; ++i) {
-                result.data.get()[i]= input.data.get()[i] - static_cast<T>(other.data.get()[i]);
+                *(result.data[i]) = *(input.data[i]) - static_cast<T>(*(other.data[i]));
             }
             return result;
         }
@@ -934,7 +955,7 @@ namespace ts {
         static Tensor<T> sub(const Tensor<T>& input,const T& value) {
             Tensor<T> result = zeros(input->shape);
             for (size_t i = 0; i < result.size; ++i) {
-                result.data.get()[i] = input->data.get()[i] - value;
+                *(result.data[i]) = *(input->data[i]) - value;
             }
             return result;
         }
@@ -942,7 +963,7 @@ namespace ts {
         Tensor<T> sub(const T& value) const {
             Tensor<T> result = zeros(this->shape);
             for (size_t i = 0; i < result.size; ++i) {
-                result.data.get()[i] = this->data.get()[i] - value;
+                *(result.data[i]) = *(this->data[i]) - value;
             }
             return result;
         }
@@ -966,9 +987,9 @@ namespace ts {
                 for (size_t j = 0; j < cols; ++j) {
                     T sum = 0;
                     for (size_t k = 0; k < commonDim; ++k) {
-                        sum += input.data.get()[i * commonDim + k] * other.data.get()[k * cols + j];
+                        sum += *(input.data[i * commonDim + k]) * *(other.data[k * cols + j]);
                     }
-                    result.data.get()[i * cols + j] = sum;
+                    *(result.data[i * cols + j]) = sum;
                 }
             }
             return result;
@@ -990,9 +1011,9 @@ namespace ts {
                 for (size_t j = 0; j < cols; ++j) {
                     T sum = 0;
                     for (size_t k = 0; k < commonDim; ++k) {
-                        sum += input.data.get()[i * commonDim + k] * other.data.get()[k * cols + j];
+                        sum += *(input.data[i * commonDim + k]) * *(other.data[k * cols + j]);
                     }
-                    result.data.get()[i * cols + j] = sum;
+                    *(result.data[i * cols + j]) = sum;
                 }
             }
             return result;
@@ -1006,7 +1027,7 @@ namespace ts {
             Tensor<T> result = zeros(other.shape);
 #pragma omp parallel for
             for (size_t i = 0; i < result.size; ++i) {
-                result.data.get()[i] =input.data.get()[i] * static_cast<T>(other.data.get()[i]);
+                *(result.data[i]) =*(input.data[i]) * static_cast<T>(*(other.data[i]));
             }
             return result;
         }
@@ -1014,7 +1035,7 @@ namespace ts {
         static Tensor<T> noBroadcast_mul(const Tensor<T>&x,const Tensor<T>& y){
             Tensor<T> result = zeros(x.shape);
             for (size_t i = 0; i < result.size; ++i) {
-                result.data.get()[i] =x.data.get()[i] * static_cast<T>(y.data.get()[i]);
+                *(result.data[i]) =*(x.data[i]) * static_cast<T>(*(y.data[i]));
             }
             return result;
         }
@@ -1026,7 +1047,7 @@ namespace ts {
             Tensor<T> other = *(processed.tensor2);
             Tensor<T> result = zeros(other.shape);
             for (size_t i = 0; i < result.size; ++i) {
-                result.data.get()[i] =input.data.get()[i] * static_cast<T>(other.data.get()[i]);
+                *(result.data[i]) =*(input.data[i]) * static_cast<T>(*(other.data[i]));
             }
             return result;
         }
@@ -1037,7 +1058,7 @@ namespace ts {
             Tensor<T> other = *(processed.tensor2);
             Tensor<T> result = zeros(other.shape);
             for (size_t i = 0; i < result.size; ++i) {
-                result.data.get()[i] =input.data.get()[i] * static_cast<T>(other.data.get()[i]);
+                *(result.data[i]) =*(input.data[i]) * static_cast<T>(*(other.data[i]));
             }
             return result;
         }
@@ -1049,7 +1070,7 @@ namespace ts {
         static Tensor<T> mul(const Tensor<T>&input,const T& value){
             Tensor<T> result = zeros(input->shape);
             for (size_t i = 0; i < result.size; ++i) {
-                result.data.get()[i]= input.data.get()[i]* value;
+                *(result.data[i])= *(input.data[i]) * value;
             }
             return result;
         }
@@ -1057,7 +1078,7 @@ namespace ts {
         Tensor<T> mul(const T& value) const {
             Tensor<T> result = zeros(this->shape);
             for (size_t i = 0; i < result.size; ++i) {
-                result.data.get()[i]= this->data.get()[i] * value;
+                *(result.data[i])= *(this->data[i]) * value;
             }
             return result;
         }
@@ -1073,7 +1094,7 @@ namespace ts {
             Tensor<T> other = *(processed.tensor2);
             Tensor<T> result = zeros(other.shape);
             for (size_t i = 0; i < result.size; ++i) {
-                result.data.get()[i] =input.data.get()[i] / static_cast<T>(other.data.get()[i]);
+                *(result.data[i]) =*(input.data[i]) / static_cast<T>(*(other.data[i]));
             }
             return result;
         }
@@ -1084,7 +1105,7 @@ namespace ts {
             Tensor<T> other = *(processed.tensor2);
             Tensor<T> result = zeros(other.shape);
             for (size_t i = 0; i < result.size; ++i) {
-                result.data.get()[i] =input.data.get()[i] / static_cast<T>(other.data.get()[i]);
+                *(result.data[i]) =*(input.data[i]) / static_cast<T>(*(other.data[i]));
             }
             return result;
         }
@@ -1098,7 +1119,7 @@ namespace ts {
         static Tensor<T> div(const Tensor<T>&input,const T& value){
             Tensor<T> result = zeros(input->shape);
             for (size_t i = 0; i < result.size; ++i) {
-                result.data.get()[i]= input.data.get()[i]/ value;
+                *(result.data[i])= *(input.data[i]) / value;
             }
             return result;
         }
@@ -1106,7 +1127,7 @@ namespace ts {
         Tensor<T> div(const T& value) const {
             Tensor<T> result = zeros(this->shape);
             for (size_t i = 0; i < result.size; ++i) {
-                result.data.get()[i]= this->data.get()[i] / value;
+                *(result.data[i])= *(this->data[i]) / value;
             }
             return result;
         }
@@ -1119,7 +1140,7 @@ namespace ts {
         static Tensor<T> log(const Tensor<T>& tensor){
             Tensor<T> result = zeros(tensor.shape);
             for(size_t i=0;i<result.size;++i){
-                result.data.get()[i] = std::log(static_cast<T>(tensor.data.get()[i]));
+                *(result.data[i]) = std::log(static_cast<T>(*(tensor.data[i])));
             }
             return result;
         }
@@ -1154,7 +1175,7 @@ namespace ts {
                 // 计算当前元素在 result 中的索引
                 size_t preDim = strides[dim] * shape[dim];
                 size_t resultIndex = (i % strides[dim]) + (i / preDim) * strides[dim];
-                result.data.get()[resultIndex] += tensor.data.get()[i];
+                *(result.data[resultIndex]) += *(tensor.data[i]);
             }
             return result;
         }
@@ -1188,11 +1209,11 @@ namespace ts {
                 // 计算当前元素在 result 中的索引
                 size_t preDim = strides[dim] * shape[dim];
                 size_t resultIndex = (i % strides[dim]) + (i / preDim) * strides[dim];
-                result.data.get()[resultIndex] += tensor.data.get()[i];
+                *(result.data[resultIndex]) += *(tensor.data[i]);
                 unorderedMap[resultIndex]+=1;
             }
             for(auto P :unorderedMap){
-                result.data.get()[P.first]/=P.second;
+                *(result.data[P.first]) /= P.second;
             }
             return result;
         }
@@ -1234,7 +1255,7 @@ namespace ts {
         static Tensor<bool> eq(const Tensor<T>&x,const Tensor<T>&y){
             Tensor<bool> res= Tensor<bool>::zeros(x.shape);
             for(int i=0;i<x.size;i++){
-                res.data.get()[i]=(x.data.get()[i]==y.data.get()[i]);
+                *(res.data[i])=(*(x.data[i])==*(y.data[i]));
             }
             return res;
         }
@@ -1251,7 +1272,7 @@ namespace ts {
         static Tensor<bool> ne(const Tensor<T>&x,const Tensor<T>&y){
             Tensor<bool> res= Tensor<bool>::zeros(x.shape);
             for(int i=0;i<x.size;i++){
-                res.data.get()[i]=(x.data.get()[i]!=y.data.get()[i]);
+                *(res.data[i])=(*(x.data[i])!=*(y.data[i]));
             }
             return res;
         }
@@ -1259,7 +1280,7 @@ namespace ts {
         Tensor<bool> ne(const Tensor<T>&other)const{
             ts::Tensor<bool> res= Tensor<bool>::zeros(this->shape);
             for(int i=0;i<this->size;i++){
-                res.data.get()[i]= this->data.get()[i] != other.data.get()[i];
+                *(res.data[i])= *(this->data[i]) != *(other.data[i]);
             }
             return res;
         }
@@ -1272,7 +1293,7 @@ namespace ts {
         static Tensor<bool> gt(const Tensor<T>&x,const Tensor<T>&y){
             Tensor<bool> res= Tensor<bool>::zeros(x.shape);
             for(int i=0;i<x.size;i++){
-                res.data.get()[i]=(x.data.get()[i]>y.data.get()[i]);
+                *(res.data[i])=(*(x.data[i]) > *(y.data[i]));
             }
             return res;
         }
@@ -1289,7 +1310,7 @@ namespace ts {
         static Tensor<bool> ge(const Tensor<T>&x,const Tensor<T>&y){
             Tensor<bool> res= Tensor<bool>::zeros(x.shape);
             for(int i=0;i<x.size;i++){
-                res.data.get()[i]=(x.data.get()[i]>=y.data.get()[i]);
+                *(res.data[i])=(*(x.data[i]) >= *(y.data[i]));
             }
             return res;
         }
@@ -1306,7 +1327,7 @@ namespace ts {
         static Tensor<bool> lt(const Tensor<T>&x,const Tensor<T>&y){
             Tensor<bool> res= Tensor<bool>::zeros(x.shape);
             for(int i=0;i<x.size;i++){
-                res.data.get()[i]=(x.data.get()[i]<y.data.get()[i]);
+                *(res.data[i])=(*(x.data[i]) < *(y.data[i]));
             }
             return res;
         }
@@ -1323,7 +1344,7 @@ namespace ts {
         static Tensor<bool> le(const Tensor<T>&x,const Tensor<T>&y){
             Tensor<bool> res= Tensor<bool>::zeros(x.shape);
             for(int i=0;i<x.size;i++){
-                res.data.get()[i]=(x.data.get()[i]<=y.data.get()[i]);
+                *(res.data[i])=(*(x.data[i]) <= *(y.data[i]));
             }
             return res;
         }
@@ -1394,7 +1415,7 @@ namespace ts {
             Tensor<T>result= zeros(res_shape);
             for(int i=0;i<n;i++){
                 for(int j=0;j<m;j++){
-                    result.data.get()[i*m+j]=x.data.get()[i]*y.data.get()[j];
+                    *(result.data[i*m+j]) = *(x.data[i]) * *(y.data[j]);
                 }
             }
             return result;
@@ -1422,7 +1443,7 @@ namespace ts {
                 for (size_t j = 0; j < n; j++) {
                     for (size_t k = 0; k < p; k++) {
                         for (size_t l = 0; l < m; l++) {
-                            result.data.get()[(i * n + j) * p + k] += x.data.get()[(i * n + j) * m + l] * y.data.get()[(i * m + l) * p + k];
+                            *(result.data[(i * n + j) * p + k]) += *(x.data[(i * n + j) * m + l]) * *(y.data[(i * m + l) * p + k]);
                         }
                     }
                 }
@@ -1442,7 +1463,7 @@ namespace ts {
             v_shape.push_back(1);
             Tensor<T> a=zeros(v_shape);
             for(int i=0;i<x.size;i++){
-                a.data.get()[0]+=x.data.get()[i]*y.data.get()[i];
+                *(a.data[0]) += *(x.data[i]) * *(y.data[i]);
             }
             return a;
         }
@@ -1466,7 +1487,7 @@ namespace ts {
                 Tensor<T> diagTensor = Tensor<T>::zeros(diagShape);
 
                 for (size_t i = 0; i < diagSize; ++i) {
-                    diagTensor.data.get()[i] = input.data.get()[i * input.strides[inputDims - 2] + (i + offset) * input.strides[inputDims - 1]];
+                    *(diagTensor.data[i]) = *(input.data[i * input.strides[inputDims - 2] + (i + offset) * input.strides[inputDims - 1]]);
                 }
 
                 return diagTensor;
@@ -1476,7 +1497,7 @@ namespace ts {
                 Tensor<T> diagTensor = Tensor<T>::zeros(diagShape);
 
                 for (size_t i = 0; i < diagSize; ++i) {
-                    diagTensor.data.get()[i] = input.data.get()[(i - offset) * input.strides[inputDims - 2] + i * input.strides[inputDims - 1]];
+                    *(diagTensor.data[i]) = *(input.data[(i - offset) * input.strides[inputDims - 2] + i * input.strides[inputDims - 1]]);
                 }
 
                 return diagTensor;
@@ -1486,7 +1507,7 @@ namespace ts {
                 Tensor<T> diagTensor = Tensor<T>::zeros(diagShape);
 
                 for (size_t i = 0; i < diagSize; ++i) {
-                    diagTensor.data.get()[i] = input.data.get()[i * input.strides[inputDims - 2] + i * input.strides[inputDims - 1]];
+                    *(diagTensor.data[i]) = *(input.data[i * input.strides[inputDims - 2] + i * input.strides[inputDims - 1]]);
                 }
 
                 return diagTensor;
@@ -1509,7 +1530,10 @@ namespace ts {
                 file.write(reinterpret_cast<const char*>(tensor.shape.data()), tensor.shape.size() * sizeof(size_t));
 
                 // 保存Tensor的数据
-                file.write(reinterpret_cast<const char*>(tensor.data.get()), tensor.size * sizeof(T));
+                for (const auto& sharedPtr : tensor.data) {
+                    const T* rawData = sharedPtr.get();
+                    file.write(reinterpret_cast<const char*>(rawData), sizeof(T));
+                }
 
                 file.close();
             } else {
@@ -1571,7 +1595,8 @@ namespace ts {
                             }
                         }
                     } else {
-                        os << tensor.data.get()[i + offset];
+                        T tmp = *(tensor.data[i + offset].get());
+                        os << *(tensor.data[i + offset]);
                         if (i < dimSize - 1) {
                             os << ", ";
                         }
@@ -1593,7 +1618,7 @@ namespace ts {
                             }
                         }
                     } else {
-                        os << std::boolalpha << tensor.data.get()[i + offset];
+                        os << std::boolalpha << *(tensor.data[i + offset]);
                         if (i < dimSize - 1) {
                             os << std::boolalpha << ", ";
                         }
@@ -1628,16 +1653,16 @@ namespace ts {
                 size_t resultIndex = (i % strides[dim]) + (i / preDim) * strides[dim];
                 if(unorderedMap.count(resultIndex)){
                     if(larger) {
-                        unorderedMap[resultIndex] = tensor.data.get()[i] > unorderedMap[resultIndex] ? tensor.data.get()[i] : unorderedMap[resultIndex];
+                        unorderedMap[resultIndex] = *(tensor.data[i]) > unorderedMap[resultIndex] ? *(tensor.data[i]) : unorderedMap[resultIndex];
                     }else{
-                        unorderedMap[resultIndex] = tensor.data.get()[i] < unorderedMap[resultIndex] ? tensor.data.get()[i] : unorderedMap[resultIndex];
+                        unorderedMap[resultIndex] = *(tensor.data[i]) < unorderedMap[resultIndex] ? *(tensor.data[i]) : unorderedMap[resultIndex];
                     }
                 }else{
-                    unorderedMap[resultIndex]=tensor.data.get()[i];
+                    unorderedMap[resultIndex]=tensor.data[i];
                 }
             }
             for(auto P :unorderedMap){
-                result.data.get()[P.first]=P.second;
+                *(result.data[P.first])=P.second;
             }
             return result;
         }

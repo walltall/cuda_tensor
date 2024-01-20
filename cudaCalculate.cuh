@@ -25,13 +25,18 @@ namespace cu {
             result_data[row * cols_y + col] = sum;
         }
     }
-
     template<typename T>
-    ts::Tensor<T> cuda_mul(const ts::Tensor<T>& x, const ts::Tensor<T>& y) {
+    ts::Tensor<T> cuda_mul(const ts::Tensor<T>&input, const ts::Tensor<T>& other) {
+        T* x=new T[input.data.size()];
+        T* y=new T[other.data.size()];
+        for(size_t i=0;i<input.get_size();i++){
+            x[i]=*(input.data[i].get());
+            y[i]=*(other.data[i].get());
+        }
         cudaSetDevice(1);
-        size_t size = x.get_size();
+        size_t size = input.get_size();
 
-        ts::Tensor<T> result = ts::Tensor<T>::zeros(x.get_shape());
+        T* result = new T[input.data.size()];
 
         T* dev_x_data;
         T* dev_y_data;
@@ -40,8 +45,8 @@ namespace cu {
         cudaMalloc((void**)&dev_y_data, size * sizeof(T));
         cudaMalloc((void**)&dev_result_data, size * sizeof(T));
 
-        cudaMemcpy(dev_x_data, x.data.get(), size * sizeof(T), cudaMemcpyHostToDevice);
-        cudaMemcpy(dev_y_data, y.data.get(), size * sizeof(T), cudaMemcpyHostToDevice);
+        cudaMemcpy(dev_x_data, x, size * sizeof(T), cudaMemcpyHostToDevice);
+        cudaMemcpy(dev_y_data, y, size * sizeof(T), cudaMemcpyHostToDevice);
 
         int blockSize = 256;
         int gridSize = (size + blockSize - 1) / blockSize;
@@ -50,25 +55,37 @@ namespace cu {
 
         cudaDeviceSynchronize();
 
-        cudaMemcpy(result.data.get(), dev_result_data, size * sizeof(T), cudaMemcpyDeviceToHost);
+        cudaMemcpy(result, dev_result_data, size * sizeof(T), cudaMemcpyDeviceToHost);
 
         cudaFree(dev_x_data);
         cudaFree(dev_y_data);
         cudaFree(dev_result_data);
-
-        return result;
+        ts::Tensor<T>ans=ts::Tensor<T>::zeros(input.get_shape());
+        for(size_t i=0;i<ans.get_size();i++){
+            *(ans.data[i])=result[i];
+        }
+        free(result);
+        free(x);
+        free(y);
+        return ans;
     }
 
     template<typename T>
-    ts::Tensor<T> cuda_MatrixMul(const ts::Tensor<T>& x, const ts::Tensor<T>& y) {
+    ts::Tensor<T> cuda_MatrixMul(const ts::Tensor<T>& input, const ts::Tensor<T>& other) {
         cudaSetDevice(1);
-        size_t rows_x = x.get_shape()[0];
-        size_t cols_x = x.get_shape()[1];
-        size_t rows_y = y.get_shape()[0];
-        size_t cols_y = y.get_shape()[1];
-
-
-        ts::Tensor<T> result = ts::Tensor<T>::zeros({rows_x, cols_y});
+        size_t rows_x = input.get_shape()[0];
+        size_t cols_x = input.get_shape()[1];
+        size_t rows_y = other.get_shape()[0];
+        size_t cols_y = other.get_shape()[1];
+        T* x=new T[input.data.size()];
+        T* y=new T[other.data.size()];
+        for(size_t i=0;i<input.get_size();i++){
+            x[i]=*(input.data[i].get());
+        }
+        for(size_t i=0;i<other.get_size();i++){
+            y[i]=*(other.data[i].get());
+        }
+        T* result=new T[rows_x*cols_y];
 
         T* dev_x_data;
         T* dev_y_data;
@@ -77,8 +94,8 @@ namespace cu {
         cudaMalloc((void**)&dev_y_data, rows_y * cols_y * sizeof(T));
         cudaMalloc((void**)&dev_result_data, rows_x * cols_y * sizeof(T));
 
-        cudaMemcpy(dev_x_data, x.data.get(), rows_x * cols_x * sizeof(T), cudaMemcpyHostToDevice);
-        cudaMemcpy(dev_y_data, y.data.get(), rows_y * cols_y * sizeof(T), cudaMemcpyHostToDevice);
+        cudaMemcpy(dev_x_data, x, rows_x * cols_x * sizeof(T), cudaMemcpyHostToDevice);
+        cudaMemcpy(dev_y_data, y, rows_y * cols_y * sizeof(T), cudaMemcpyHostToDevice);
 
         dim3 blockSize(16, 16);
         dim3 gridSize((cols_y + blockSize.x - 1) / blockSize.x, (rows_x + blockSize.y - 1) / blockSize.y);
@@ -87,13 +104,19 @@ namespace cu {
 
         cudaDeviceSynchronize();
 
-        cudaMemcpy(result.data.get(), dev_result_data, rows_x * cols_y * sizeof(T), cudaMemcpyDeviceToHost);
+        cudaMemcpy(result, dev_result_data, rows_x * cols_y * sizeof(T), cudaMemcpyDeviceToHost);
 
         cudaFree(dev_x_data);
         cudaFree(dev_y_data);
         cudaFree(dev_result_data);
-
-        return result;
+        ts::Tensor<T> ans = ts::Tensor<T>::zeros({rows_x, cols_y});
+        for(size_t i=0;i<ans.get_size();i++){
+            *(ans.data[i])=result[i];
+        }
+        free(result);
+        free(x);
+        free(y);
+        return ans;
     }
 
 }  // namespace cu
