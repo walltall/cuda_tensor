@@ -1,0 +1,54 @@
+//
+// Created by 30771 on 2024/1/19.
+//
+#include <cuda_runtime.h>
+#include "tensor.cuh"
+
+template<typename T>
+__global__ void cuda_mul_kernel(const ts::Tensor<T> x, ts::Tensor<T> result) {
+    // 获取当前线程的全局索引
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+
+    // 检查索引是否在张量范围内
+    if (idx < x.get_size()) {
+        // 读取输入张量的数据
+        T value = x.data.get()[idx];
+
+        // 执行乘法运算，并将结果写入输出张量
+        result.data.get()[idx] = value * value;
+    }
+}
+
+template<typename T>
+ts::Tensor<T> cuda_mul(const ts::Tensor<T> &x) {
+    // 创建一个与输入张量相同形状的输出张量
+    ts::Tensor<T> result = ts::Tensor<T>::zeros(x.get_shape());
+
+    // 计算执行配置
+    int blockSize = 256;
+    int numBlocks = (x.get_size() + blockSize - 1) / blockSize;
+
+    // 在CUDA设备上分配内存并拷贝输入张量数据
+    ts::Tensor<T> deviceX = x;
+    deviceX.data = std::shared_ptr<T>(new T[x.get_size()], std::default_delete<T[]>());
+    cudaMemcpy(deviceX.data.get(), x.data.get(), x.get_size() * sizeof(T), cudaMemcpyHostToDevice);
+
+    // 在CUDA设备上分配内存并拷贝输出张量数据
+    ts::Tensor<T> deviceResult = result;
+    deviceResult.data = std::shared_ptr<T>(new T[result.get_size()], std::default_delete<T[]>());
+    cudaMemcpy(deviceResult.data.get(), result.data.get(), result.get_size() * sizeof(T), cudaMemcpyHostToDevice);
+
+    // 在CUDA设备上执行核函数
+    cuda_mul_kernel<<<numBlocks, blockSize>>>(deviceX, deviceResult);
+
+    // 将结果从CUDA设备拷贝回主机内存
+    cudaMemcpy(result.data.get(), deviceResult.data.get(), result.get_size() * sizeof(T), cudaMemcpyDeviceToHost);
+
+    // 释放CUDA设备上的内存
+//        cudaFree(deviceX.data.get());
+//        cudaFree(deviceResult.data.get());
+
+    return result;
+}
+
+

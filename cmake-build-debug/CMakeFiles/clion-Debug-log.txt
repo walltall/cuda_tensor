@@ -1,0 +1,28 @@
+D:\Clion\bin\cmake\win\x64\bin\cmake.exe -DCMAKE_BUILD_TYPE=Debug -DCMAKE_MAKE_PROGRAM=D:/Clion/bin/ninja/win/x64/ninja.exe "C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\bin\nvcc.exe" -G Ninja -S E:\CPP_code\cuda_project -B E:\CPP_code\cuda_project\cmake-build-debug
+CMake Warning:
+  Ignoring extra path from command line:
+
+   "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v12.3/bin/nvcc.exe"
+
+
+CMake Warning:
+  Ignoring extra path from command line:
+
+   "C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\bin\nvcc.exe"
+
+
+-- The CUDA compiler identification is NVIDIA 12.3.107
+-- The CXX compiler identification is MSVC 19.38.33134.0
+-- Detecting CUDA compiler ABI info
+-- Detecting CUDA compiler ABI info - done
+-- Check for working CUDA compiler: C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v12.3/bin/nvcc.exe - skipped
+-- Detecting CUDA compile features
+-- Detecting CUDA compile features - done
+-- Detecting CXX compiler ABI info
+-- Detecting CXX compiler ABI info - done
+-- Check for working CXX compiler: D:/visual_studio/VC/Tools/MSVC/14.38.33130/bin/Hostx64/x64/cl.exe - skipped
+-- Detecting CXX compile features
+-- Detecting CXX compile features - done
+-- Configuring done (8.6s)
+-- Generating done (0.0s)
+-- Build files have been written to: E:/CPP_code/cuda_project/cmake-build-debug
