@@ -10,9 +10,124 @@
 #include <unordered_map>
 #include <fstream>
 #include <regex>
-#include <stdio.h>
-
+#include <stdexcept>
+#include <omp.h>
 namespace ts {
+    template <typename T>
+    class Tensor;
+
+    template <typename TT>
+    struct broadcast_tensor{
+        std::shared_ptr<Tensor<TT>> tensor1;
+        std::shared_ptr<Tensor<TT>> tensor2;
+        broadcast_tensor(const Tensor<TT>& t1, const Tensor<TT>& t2) : tensor1(std::make_shared<Tensor<TT>>(t1)), tensor2(std::make_shared<Tensor<TT>>(t2)) {}
+    };
+
+    class IndexError : public std::exception {
+    private:
+        std::string message;
+    public:
+
+        IndexError(std::string message){
+            this->message = message;
+        }
+
+        const char* what() const noexcept override {
+            return message.c_str();
+        }
+    };
+
+    class BroadcastError : public std::exception {
+    private:
+        std::string message;
+    public:
+        BroadcastError(std::string message){
+            this->message = message;
+        }
+
+        const char* what() const noexcept override {
+            return message.c_str();
+        }
+    };
+
+    class EmptyVectorError : public std::exception {
+    private:
+        std::string message;
+    public:
+        EmptyVectorError(std::string message){
+            this->message = message;
+        }
+
+        const char* what() const noexcept override {
+            return message.c_str();
+        }
+    };
+
+    class DimensionError : public std::exception {
+    private:
+        std::string message;
+    public:
+        DimensionError(std::string message){
+            this->message = message;
+        }
+
+        const char* what() const noexcept override {
+            return message.c_str();
+        }
+    };
+
+    class ShapeError : public std::exception {
+    private:
+        std::string message;
+    public:
+        ShapeError(std::string message){
+            this->message = message;
+        }
+
+        const char* what() const noexcept override {
+            return message.c_str();
+        }
+    };
+
+    class ExpressionMismatchError : public std::exception {
+    private:
+        std::string message;
+    public:
+        ExpressionMismatchError(std::string message){
+            this->message = message;
+        }
+
+        const char* what() const noexcept override {
+            return message.c_str();
+        }
+    };
+
+    class ExpressionNotSupportedError : public std::exception {
+    private:
+        std::string message;
+    public:
+        ExpressionNotSupportedError(std::string message){
+            this->message = message;
+        }
+
+        const char* what() const noexcept override {
+            return message.c_str();
+        }
+    };
+
+    class OpenFileError : public std::exception {
+    private:
+        std::string message;
+    public:
+        OpenFileError(std::string message){
+            this->message = message;
+        }
+
+        const char* what() const noexcept override {
+            return message.c_str();
+        }
+    };
+
     template <typename T>
     class Tensor {
     private:
@@ -76,6 +191,7 @@ namespace ts {
     public:
         std::shared_ptr<T> data;
         Tensor() = default;
+
         std::vector<size_t> get_shape()const{
             return shape;
         }
@@ -114,7 +230,15 @@ namespace ts {
             }
         }
 
-
+        Tensor(const Tensor<T> & other){
+            this->shape = other.shape;
+            this->strides = other.strides;
+            this->size = other.size;
+            this->dims = other.dims;
+            std::shared_ptr<T> tmp(new T[this->size](), std::default_delete<T[]>());
+            this->data = tmp;
+            for(int i = 0; i < this->size; i++) this->data.get()[i] = other.data.get()[i];
+        }
 
         static Tensor<T> rand(const std::vector<size_t>& dimensions) {
             Tensor<T> randomTensor;
@@ -294,9 +418,11 @@ namespace ts {
 
 
         Tensor<T> operator()(size_t index) {
-            int indexDim = this->dims - 1;
+            if(index >= shape[0] || index < 0) {
+                throw IndexError("IndexError: Index is out of bound");
+            }
             std::vector<size_t> dimensions;
-            for(int i = 1; i <= indexDim; i++) dimensions.push_back(this->shape[i]);
+            for(int i = 1; i < this->dims; i++) dimensions.push_back(this->shape[i]);
             if(dimensions.empty()) dimensions.push_back(1);
             int indexSize = this->size / shape[0];
             std::shared_ptr<T> indexData(this->data, this->data.get() + index * this->strides[0]);
@@ -305,11 +431,18 @@ namespace ts {
         }
 
         Tensor<T> operator()(size_t location, const std::vector<size_t>& indices) {
+            if((location >= this->shape[0] || location < 0) || (indices[0] >= this->shape[0] || indices[0] < 0) || (indices[1] >= this->shape[0] || indices[1] < 0)) {
+
+            }
             int sliceSize = indices[1] - indices[0];
             int startIndex = indices[0];
             std::vector<size_t> dimensions;
             dimensions.push_back(sliceSize);
-            std::shared_ptr<T> sliceData(this->data, this->data.get() + location * this->strides[0] + startIndex);
+            for(int i = 2; i < dims; i++){
+                dimensions.push_back(this->shape[i]);
+            }
+            sliceSize *= this->strides[1];
+            std::shared_ptr<T> sliceData(this->data, this->data.get() + location * this->strides[0] + startIndex * this->strides[1]);
             Tensor<T> spliceT(sliceData, sliceSize, dimensions);
             return spliceT;
         }
@@ -335,33 +468,58 @@ namespace ts {
 //        }
 
 
-        static std::vector<size_t> get_broadcastShape(const Tensor<T>&x,const Tensor<T>&y){
+        static broadcast_tensor<T> broadcast(const Tensor<T> & x,const Tensor<T> & y){
             //对比x,y的维度是否符合广播条件
-            int x_end=x.shape.size()-1;
-            int y_end=y.shape.size()-1;
-            while(x_end>=0&&y_end>=0){
-                if(!(x.shape[x_end]==y.shape[y_end]||x.shape[x_end]==1||y.shape[y_end]==1)){
-                    throw std::invalid_argument("Shape are not broadcastable.");
+            int x_end = x.shape.size() - 1;
+            int y_end = y.shape.size() - 1;
+            std::vector<int> x_broad;
+            std::vector<int> y_broad;
+            while(x_end >= 0 && y_end >= 0){
+                if(x.shape[x_end] == y.shape[y_end]){
+                    x_broad.insert(x_broad.begin(), 1);
+                    y_broad.insert(y_broad.begin(), 1);
+                } else if(x.shape[x_end] == 1){
+                    x_broad.insert(x_broad.begin(), (int)y.shape[y_end]);
+                    y_broad.insert(y_broad.begin(), 1);
+                } else if(y.shape[y_end] == 1){
+                    x_broad.insert(x_broad.begin(), 1);
+                    y_broad.insert(y_broad.begin(), (int)x.shape[x_end]);
+                } else{
+                    throw BroadcastError("BroadcastError: The input is not broadcastable");
                 }
                 x_end--;
                 y_end--;
             }
-            //检查完毕，开始广播：
-            std::vector<size_t> broadcast_Shape;
-            int max_dim = std::max(x.shape.size(),y.shape.size());
-            broadcast_Shape.resize(max_dim);
-            int x_idx = x.shape.size()-1;
-            int y_idx = y.shape.size()-1;
-            int broadcast_idx = max_dim -1;
-            while(broadcast_idx >=0){
-                size_t dim_x = (x_idx>=0) ? x.shape[x_idx] : 1;
-                size_t dim_y = (y_idx>=0) ? y.shape[y_idx] : 1;
-                broadcast_Shape[broadcast_idx] = std::max(dim_x,dim_y);
-                x_idx--;
-                y_idx--;
-                broadcast_idx--;
+            while (x_end >= 0){
+                x_broad.insert(x_broad.begin(), 1);
+                y_broad.insert(y_broad.begin(), (int)x.shape[x_end]);
+                x_end--;
             }
-            return broadcast_Shape;
+            while (y_end >= 0){
+                x_broad.insert(x_broad.begin(), (int)y.shape[y_end]);
+                y_broad.insert(y_broad.begin(), 1);
+                y_end--;
+            }
+            Tensor<T> broadcast1 = Tensor<T>::tile(x, x_broad);
+            Tensor<T> broadcast2 = Tensor<T>::tile(y, y_broad);
+            broadcast_tensor<T> broadcast_t(broadcast1, broadcast2);
+            return broadcast_t;
+            //检查完毕，开始广播：
+//            std::vector<size_t> broadcast_Shape;
+//            int max_dim = std::max(x.shape.size(),y.shape.size());
+//            broadcast_Shape.resize(max_dim);
+//            int x_idx = x.shape.size()-1;
+//            int y_idx = y.shape.size()-1;
+//            int broadcast_idx = max_dim -1;
+//            while(broadcast_idx >=0){
+//                size_t dim_x = (x_idx>=0) ? x.shape[x_idx] : 1;
+//                size_t dim_y = (y_idx>=0) ? y.shape[y_idx] : 1;
+//                broadcast_Shape[broadcast_idx] = std::max(dim_x,dim_y);
+//                x_idx--;
+//                y_idx--;
+//                broadcast_idx--;
+//            }
+//            return broadcast_Shape;
         }
 
         static Tensor<T> broadcasting(const Tensor<T>& x, const std::vector<size_t>& broadcastShape) {
@@ -377,7 +535,6 @@ namespace ts {
                 strides[i] = stride;
                 stride *= xShape[i];
             }
-
             // 使用循环遍历 result 张量的所有元素，并根据广播规则赋值
             std::vector<size_t> xIndices(xDims, 0);  // 用于保存当前元素在 x 张量中的索引
             for (size_t i = 0; i < result.size; ++i) {
@@ -410,6 +567,12 @@ namespace ts {
         // 2.2 joining
         // concat
         static Tensor<T> cat(std::vector<Tensor<T>> tensors, int dim){
+            if(tensors.size() == 0){
+                throw EmptyVectorError("EmptyVectorError: Please input at least 1 tensor");
+            }
+            if(dim < 0){
+                throw DimensionError("DimensionError: Cannot cat in negative dimension");
+            }
             Tensor<T> mainTensor = tensors[0];
             size_t mainDim = mainTensor.shape[dim];
             std::vector<size_t> newDimension = mainTensor.shape;
@@ -460,7 +623,7 @@ namespace ts {
             for(size_t i = 0; i < dims.size(); i++){
                 if(dims[i] <= 0){
                     //error
-                    std::cout << "error" << std::endl;
+                    throw DimensionError("DimensionError: Cannot tile with non-positive dimensions");
                 } else{
                     newDimension[i] *= dims[i];
                 }
@@ -509,6 +672,9 @@ namespace ts {
         // 2.4 transpose & permutation
         //transpose
         static Tensor<T> transpose(Tensor<T> tensor, int dim1, int dim2) {
+            if(dim1 < 0 || dim2 < 0){
+                throw DimensionError("DimensionError: Cannot transpose on negative dimensions");
+            }
             std::vector<size_t> newDimension = tensor.shape;
             newDimension[dim1] = tensor.shape[dim2];
             newDimension[dim2] = tensor.shape[dim1];
@@ -535,6 +701,9 @@ namespace ts {
         }
 
         Tensor<T> transpose(int dim1, int dim2) {
+            if(dim1 < 0 || dim2 < 0){
+                throw DimensionError("DimensionError: Cannot transpose on negative dimensions");
+            }
             std::vector<size_t> newDimension = this->shape;
             newDimension[dim1] = this->shape[dim2];
             newDimension[dim2] = this->shape[dim1];
@@ -563,18 +732,23 @@ namespace ts {
         // permutation
         static Tensor<T> permute(Tensor<T> tensor, const std::vector<int> & dim){
             std::vector<size_t> newDimension = tensor.shape;
-            for(size_t i = 0; i < dim.size(); i++) newDimension[i] = tensor.shape[dim[i]];
+            for(size_t i = 0; i < dim.size(); i++) {
+                if(dim[i] < 0){
+                    throw DimensionError("DimensionError: Cannot permute on negative dimensions");
+                }
+                newDimension[i] = tensor.shape[dim[i]];
+            }
             Tensor<T> trans = Tensor<T>::zeros(newDimension);
             for(size_t i = 0; i < trans.size; i++) {
-                std::shared_ptr<T> src_ptr(tensor.data, tensor.data.get() + i);
-                size_t src_index = i;
-                size_t dst_index = 0;
-                for (size_t j = 0; j < tensor.strides.size(); ++j) {
-                    size_t coordinate = src_index / tensor.strides[j];
-                    src_index %= tensor.strides[j];
-                    dst_index += coordinate * trans.strides[dim[j]];
+                std::shared_ptr<T> dst_ptr(trans.data, trans.data.get() + i);
+                size_t src_index = 0;
+                size_t dst_index = i;
+                for (size_t j = 0; j < trans.strides.size(); ++j) {
+                    size_t coordinate = dst_index / trans.strides[j];
+                    dst_index %= trans.strides[j];
+                    src_index += coordinate * tensor.strides[dim[j]];
                 }
-                std::shared_ptr<T> dst_ptr(trans.data, trans.data.get() + dst_index);
+                std::shared_ptr<T> src_ptr(tensor.data, tensor.data.get() + src_index);
                 *dst_ptr = *src_ptr;
             }
             return trans;
@@ -582,18 +756,23 @@ namespace ts {
 
         Tensor<T> permute(const std::vector<int> & dim){
             std::vector<size_t> newDimension = this->shape;
-            for(size_t i = 0; i < dim.size(); i++) newDimension[i] = this->shape[dim[i]];
+            for(size_t i = 0; i < dim.size(); i++) {
+                if(dim[i] < 0){
+                    throw DimensionError("DimensionError: Cannot permute on negative dimensions");
+                }
+                newDimension[i] = this->shape[dim[i]];
+            }
             Tensor<T> trans = Tensor<T>::zeros(newDimension);
             for(size_t i = 0; i < trans.size; i++) {
-                std::shared_ptr<T> src_ptr(this->data, this->data.get() + i);
-                size_t src_index = i;
-                size_t dst_index = 0;
-                for (size_t j = 0; j < this->strides.size(); ++j) {
-                    size_t coordinate = src_index / this->strides[j];
-                    src_index %= this->strides[j];
-                    dst_index += coordinate * trans.strides[dim[j]];
+                std::shared_ptr<T> dst_ptr(trans.data, trans.data.get() + i);
+                size_t src_index = 0;
+                size_t dst_index = i;
+                for (size_t j = 0; j < trans.strides.size(); ++j) {
+                    size_t coordinate = dst_index / trans.strides[j];
+                    dst_index %= trans.strides[j];
+                    src_index += coordinate * this->strides[dim[j]];
                 }
-                std::shared_ptr<T> dst_ptr(trans.data, trans.data.get() + dst_index);
+                std::shared_ptr<T> src_ptr(this->data, this->data.get() + src_index);
                 *dst_ptr = *src_ptr;
             }
             return trans;
@@ -612,7 +791,7 @@ namespace ts {
                     reserve = i;
                 } else{
                     // error
-                    std::cout << "error" << std::endl;
+                    throw DimensionError("DimensionError: Invalid dimensions");
                 }
             }
             if(reserve != -1){
@@ -622,7 +801,7 @@ namespace ts {
             }
             if(tensor.size != full_size) {
                 //error
-                std::cout << "error" << std::endl;
+                throw ShapeError("ShapeError: Shape does not match");
             }
             std::vector<size_t> dimensions;
             for(size_t i = 0; i < newDimension.size(); i++) dimensions.push_back(newDimension[i]);
@@ -643,7 +822,7 @@ namespace ts {
                     reserve = i;
                 } else{
                     // error
-                    std::cout << "error" << std::endl;
+                    throw DimensionError("DimensionError: Invalid dimensions");
                 }
             }
             if(reserve != -1){
@@ -653,7 +832,7 @@ namespace ts {
             }
             if(this->size != full_size) {
                 //error
-                std::cout << "error" << std::endl;
+                throw ShapeError("ShapeError: Shape does not match");
             }
             std::vector<size_t> dimensions;
             for(size_t i = 0; i < newDimension.size(); i++) dimensions.push_back(newDimension[i]);
@@ -674,7 +853,10 @@ namespace ts {
 //            return *result;
 //        }
 
-        static Tensor<T> add(const Tensor<T>&input,const Tensor<T>& other){
+        static Tensor<T> add(const Tensor<T>&x,const Tensor<T>& y){
+            broadcast_tensor<T> processed = broadcast(x, y);
+            Tensor<T> input = *(processed.tensor1);
+            Tensor<T> other = *(processed.tensor2);
             Tensor<T> result = zeros(other.shape);
             for (size_t i = 0; i < result.size; ++i) {
                 result.data.get()[i] =input.data.get()[i] + static_cast<T>(other.data.get()[i]);
@@ -682,10 +864,13 @@ namespace ts {
             return result;
         }
 
-        Tensor<T> add(const Tensor<T>& other)const{
+        Tensor<T> add(const Tensor<T>& y)const{
+            broadcast_tensor<T> processed = broadcast(*this, y);
+            Tensor<T> input = *(processed.tensor1);
+            Tensor<T> other = *(processed.tensor2);
             Tensor<T> result = zeros(other.shape);
             for (size_t i = 0; i < result.size; ++i) {
-                result.data.get()[i] =this->data.get()[i] + static_cast<T>(other.data.get()[i]);
+                result.data.get()[i] =input.data.get()[i] + static_cast<T>(other.data.get()[i]);
             }
             return result;
         }
@@ -720,7 +905,10 @@ namespace ts {
 
         //----sub
 
-        static Tensor<T> sub(const Tensor<T>& input,const Tensor<T>& other){
+        static Tensor<T> sub(const Tensor<T>& x,const Tensor<T>& y){
+            broadcast_tensor<T> processed = broadcast(x, y);
+            Tensor<T> input = *(processed.tensor1);
+            Tensor<T> other = *(processed.tensor2);
             Tensor<T> result = zeros(other.shape);
             for (size_t i = 0; i < result.size; ++i) {
                 result.data.get()[i]= input.data.get()[i]- static_cast<T>(other.data.get()[i]);
@@ -728,10 +916,13 @@ namespace ts {
             return result;
         }
 
-        Tensor<T> sub(const Tensor<T>& other)const{
+        Tensor<T> sub(const Tensor<T>& y)const{
+            broadcast_tensor<T> processed = broadcast(*this, y);
+            Tensor<T> input = *(processed.tensor1);
+            Tensor<T> other = *(processed.tensor2);
             Tensor<T> result = zeros(other.shape);
             for (size_t i = 0; i < result.size; ++i) {
-                result.data.get()[i]= this->data.get()[i] - static_cast<T>(other.data.get()[i]);
+                result.data.get()[i]= input.data.get()[i] - static_cast<T>(other.data.get()[i]);
             }
             return result;
         }
@@ -761,8 +952,78 @@ namespace ts {
             return sub(value);
         }
 
+        static Tensor<T> openMp_matrix_mul(const Tensor<T>&input,const Tensor<T>&other){
+            if(input.size!=other.size||input.dims!=2||other.dims!=2||input.shape[0]!=other.shape[1]||
+               input.shape[1]!=other.shape[0]){
+                throw ShapeError("ShapeError: Shape does not match");
+            }
+            size_t rows = input.shape[0];
+            size_t cols = other.shape[1];
+            size_t commonDim = input.shape[1];
+            Tensor<T> result = zeros({rows, cols});
+#pragma omp parallel for
+            for (size_t i = 0; i < rows; ++i) {
+                for (size_t j = 0; j < cols; ++j) {
+                    T sum = 0;
+                    for (size_t k = 0; k < commonDim; ++k) {
+                        sum += input.data.get()[i * commonDim + k] * other.data.get()[k * cols + j];
+                    }
+                    result.data.get()[i * cols + j] = sum;
+                }
+            }
+            return result;
+        }
+        Tensor<T> openMp_matrix_mul(const Tensor<T>& other){
+            return openMp_matrix_mul(*this,other);
+        }
+
+        static Tensor<T> matrix_mul(const Tensor<T>&input,const Tensor<T>& other){
+            if(input.size!=other.size||input.dims!=2||other.dims!=2||input.shape[0]!=other.shape[1]||
+               input.shape[1]!=other.shape[0]){
+                throw ShapeError("ShapeError: Shape does not match");
+            }
+            size_t rows = input.shape[0];
+            size_t cols = other.shape[1];
+            size_t commonDim = input.shape[1];
+            Tensor<T> result = zeros({rows, cols});
+            for (size_t i = 0; i < rows; ++i) {
+                for (size_t j = 0; j < cols; ++j) {
+                    T sum = 0;
+                    for (size_t k = 0; k < commonDim; ++k) {
+                        sum += input.data.get()[i * commonDim + k] * other.data.get()[k * cols + j];
+                    }
+                    result.data.get()[i * cols + j] = sum;
+                }
+            }
+            return result;
+        }
+
+        Tensor<T> matrix_mul(const Tensor<T>& other){
+            return matrix_mul(*this,other);
+        }
+
+        static Tensor<T> openMp_mul(const Tensor<T>&input,const Tensor<T>& other){
+            Tensor<T> result = zeros(other.shape);
+#pragma omp parallel for
+            for (size_t i = 0; i < result.size; ++i) {
+                result.data.get()[i] =input.data.get()[i] * static_cast<T>(other.data.get()[i]);
+            }
+            return result;
+        }
+
+        static Tensor<T> noBroadcast_mul(const Tensor<T>&x,const Tensor<T>& y){
+            Tensor<T> result = zeros(x.shape);
+            for (size_t i = 0; i < result.size; ++i) {
+                result.data.get()[i] =x.data.get()[i] * static_cast<T>(y.data.get()[i]);
+            }
+            return result;
+        }
+
         //mul
-        static Tensor<T> mul(const Tensor<T>&input,const Tensor<T>& other){
+        static Tensor<T> mul(const Tensor<T>&x,const Tensor<T>& y){
+            broadcast_tensor<T> processed = broadcast(x, y);
+            Tensor<T> input = *(processed.tensor1);
+            Tensor<T> other = *(processed.tensor2);
             Tensor<T> result = zeros(other.shape);
             for (size_t i = 0; i < result.size; ++i) {
                 result.data.get()[i] =input.data.get()[i] * static_cast<T>(other.data.get()[i]);
@@ -770,19 +1031,20 @@ namespace ts {
             return result;
         }
 
-        Tensor<T> mul(const Tensor<T>& other)const{
+        Tensor<T> mul(const Tensor<T>& y)const{
+            broadcast_tensor<T> processed = broadcast(*this, y);
+            Tensor<T> input = *(processed.tensor1);
+            Tensor<T> other = *(processed.tensor2);
             Tensor<T> result = zeros(other.shape);
             for (size_t i = 0; i < result.size; ++i) {
-                result.data.get()[i] =this->data.get()[i] * static_cast<T>(other.data.get()[i]);
+                result.data.get()[i] =input.data.get()[i] * static_cast<T>(other.data.get()[i]);
             }
             return result;
         }
 
-
         Tensor<T> operator*(const Tensor<T>& other) const {
             return mul(other);
         }
-
 
         static Tensor<T> mul(const Tensor<T>&input,const T& value){
             Tensor<T> result = zeros(input->shape);
@@ -804,12 +1066,11 @@ namespace ts {
             return mul(value);
         }
 
-        //gpu mul:
-//         void matrixMulGPU()
-
-
         //div
-        static Tensor<T> div(const Tensor<T>&input,const Tensor<T>& other){
+        static Tensor<T> div(const Tensor<T>&x,const Tensor<T>& y){
+            broadcast_tensor<T> processed = broadcast(x, y);
+            Tensor<T> input = *(processed.tensor1);
+            Tensor<T> other = *(processed.tensor2);
             Tensor<T> result = zeros(other.shape);
             for (size_t i = 0; i < result.size; ++i) {
                 result.data.get()[i] =input.data.get()[i] / static_cast<T>(other.data.get()[i]);
@@ -817,10 +1078,13 @@ namespace ts {
             return result;
         }
 
-        Tensor<T> div(const Tensor<T>& other)const{
+        Tensor<T> div(const Tensor<T>& y)const{
+            broadcast_tensor<T> processed = broadcast(*this, y);
+            Tensor<T> input = *(processed.tensor1);
+            Tensor<T> other = *(processed.tensor2);
             Tensor<T> result = zeros(other.shape);
             for (size_t i = 0; i < result.size; ++i) {
-                result.data.get()[i] =this->data.get()[i] / static_cast<T>(other.data.get()[i]);
+                result.data.get()[i] =input.data.get()[i] / static_cast<T>(other.data.get()[i]);
             }
             return result;
         }
@@ -895,8 +1159,8 @@ namespace ts {
             return result;
         }
 
-         Tensor<T> sum( int dim) {
-             return sum(*this,dim);
+        Tensor<T> sum( int dim) {
+            return sum(*this,dim);
         }
 
 
@@ -963,8 +1227,8 @@ namespace ts {
 
         //sum:
 
-         //comparison operations
-         // equal:
+        //comparison operations
+        // equal:
         //comparison operations
         // equal:
         static Tensor<bool> eq(const Tensor<T>&x,const Tensor<T>&y){
@@ -1014,7 +1278,7 @@ namespace ts {
         }
 
         Tensor<bool> gt(const Tensor<T>&other)const{
-                return gt(*this,other);
+            return gt(*this,other);
         }
 
         Tensor<bool> operator>(const Tensor<T>&other)const{
@@ -1048,7 +1312,7 @@ namespace ts {
         }
 
         Tensor<bool> lt(const Tensor<T>&other)const{
-                return lt(*this,other);
+            return lt(*this,other);
         }
 
         Tensor<bool> operator<(const Tensor<T>&other)const{
@@ -1078,46 +1342,52 @@ namespace ts {
         // /^[\s]*([a-zA-Z]){2}[\s]*->[\s]*\1[\s]*$/
         // /^[\s]*([a-zA-Z])[\s]*,[\s]*([a-zA-Z])[\s]*->[\s]*\1\2[\s]*$/
         // /^[\s]*([a-zA-Z])([a-zA-Z])([a-zA-Z])[\s]*,[\s]*\1\3([a-zA-Z])[\s]*->[\s]*\1\2\4[\s]*$/
-        static Tensor<T> einsum(const std::string expression, const Tensor<T> tensor1, Tensor<T> tensor2){
+        static Tensor<T> einsum(const std::string expression, const std::vector<Tensor<T>> tensors){
             std::regex dot_pattern("[\\s]*([a-zA-Z])[\\s]*,[\\s]*\\1[\\s]*->[\\s]*");
             std::regex elementwise_pattern("[\\s]*([a-zA-Z])[\\s]*,[\\s]*\\1[\\s]*->[\\s]*\\1[\\s]*");
             std::regex diagonal_pattern("[\\s]*([a-zA-Z]){2}[\\s]*->[\\s]*\\1[\\s]*");
             std::regex outer_pattern("[\\s]*([a-zA-Z])[\\s]*,[\\s]*([a-zA-Z])[\\s]*->[\\s]*\\1\\2[\\s]*");
             std::regex bmm_pattern("[\\s]*([a-zA-Z])([a-zA-Z])([a-zA-Z])[\\s]*,[\\s]*\\1\\3([a-zA-Z])[\\s]*->[\\s]*\\1\\2\\4[\\s]*");
             std::vector<size_t> test = {1};
-            if(std::regex_match(expression, dot_pattern)){
-                std::cout << "dot match" << std::endl;
-                return Tensor<T>::zeros(test);
-            }
-            if(std::regex_match(expression, elementwise_pattern)){
-                std::cout << "element match" << std::endl;
-                return tensor1 * tensor2;
+            if(tensors.size() < 1){
+                // throw exception
+                throw EmptyVectorError("EmptyVectorError: Please input at least 1 tensor");
             }
             if(std::regex_match(expression, diagonal_pattern)){
-                std::cout << "diag match" << std::endl;
-                return Tensor<T>::zeros(test);
+                //                std::cout << "diag match" << std::endl;
+                return Tensor<T>::diagonal(tensors[0]);
+            }
+            if(tensors.size() < 2){
+                // throw exception
+                throw ExpressionMismatchError("ExpressionMismatchError: Please input at least 2 tensors");
+            }
+            if(std::regex_match(expression, dot_pattern)){
+//                std::cout << "dot match" << std::endl;
+                return Tensor<T>::dot(tensors[0], tensors[1]);
+            }
+            if(std::regex_match(expression, elementwise_pattern)) {
+                //                std::cout << "element match" << std::endl;
+                return tensors[0] * tensors[1];
             }
             if(std::regex_match(expression, outer_pattern)){
-                std::cout << "outer match" << std::endl;
-                return outer(tensor1, tensor2);
+//                std::cout << "outer match" << std::endl;
+                return outer(tensors[0], tensors[1]);
             }
             if(std::regex_match(expression, bmm_pattern)){
-                std::cout << "bmm match" << std::endl;
-                return bmm(tensor1, tensor2);
+//                std::cout << "bmm match" << std::endl;
+                return bmm(tensors[0], tensors[1]);
             }
             // throw exception no matches
-            std::cerr << "expression not supported" << std::endl;
-            return Tensor<T>::zeros(test);
+            throw ExpressionNotSupportedError("ExpressionNotSupportedError: Expression not supported");
         }
 
         //outer product:
         static Tensor<T> outer(const Tensor<T>&x,const Tensor<T>&y){
-            if(x.dims!=2||y.dims!=2||x.shape.size()!=2||y.shape.size()!=2||
-                x.shape[0]!=1||y.shape[0]!=1){
-                throw std::invalid_argument("Shape are not allowed.");
+            if(x.dims!=1||y.dims!=1){
+                throw ShapeError("ShapeError: Shape are not allowed.");
             }
-            size_t n=x.shape[1];
-            size_t m=y.shape[1];
+            size_t n=x.shape[0];
+            size_t m=y.shape[0];
             std::vector<size_t>res_shape;
             res_shape.push_back(n);
             res_shape.push_back(m);
@@ -1137,7 +1407,7 @@ namespace ts {
         //batch matrix multiplication
         static Tensor<T> bmm(const Tensor<T>&x,const Tensor<T>&y){
             if(x.dims!=3||y.dims!=3||x.shape[0]!=y.shape[0]||x.shape[2]!=y.shape[1]){
-                throw std::invalid_argument("Shape are not allowed.");
+                throw ShapeError("ShapeError: Shape are not allowed.");
             }
             size_t b=x.shape[0];
             size_t n=x.shape[1];
@@ -1166,7 +1436,7 @@ namespace ts {
 
         static Tensor<T> dot(const Tensor<T>&x,const Tensor<T>&y){
             if(x.dims!=1||y.dims!=1||x.shape[0]!=y.shape[0]){
-                throw std::invalid_argument("Shape are not allowed.");
+                throw ShapeError("ShapeError: Shape are not allowed.");
             }
             std::vector<size_t>v_shape;
             v_shape.push_back(1);
@@ -1184,7 +1454,7 @@ namespace ts {
         static Tensor<T> diagonal(const Tensor<T>& input, int offset = 0) {
             size_t inputDims = input.dims;
             if (inputDims < 2) {
-                throw std::runtime_error("Input tensor must have at least 2 dimensions.");
+                throw DimensionError("DimensionError: Input tensor must have at least 2 dimensions.");
             }
 
             size_t rows = input.shape[inputDims - 2];
@@ -1224,7 +1494,6 @@ namespace ts {
         }
 
 
-
         template <typename U>
         static void save(const Tensor<T>& tensor, const std::string& filename) {
             std::ofstream file(filename, std::ios::out | std::ios::binary);
@@ -1244,7 +1513,7 @@ namespace ts {
 
                 file.close();
             } else {
-                std::cerr << "Failed to open file: " << filename << std::endl;
+                throw OpenFileError("OpenFileError: Failed to open file: " + filename);
             }
         }
 
@@ -1275,8 +1544,7 @@ namespace ts {
 
                 return Tensor<T>(data, size, shape);
             } else {
-                std::cerr << "Failed to open file: " << filename << std::endl;
-                return Tensor<T>();
+                throw OpenFileError("OpenFileError: Failed to open file: " + filename);
             }
         }
 
@@ -1284,27 +1552,51 @@ namespace ts {
 
 
 
-     private:
+    private:
         static size_t printTensor(std::ostream& os, const Tensor<T>& tensor, size_t level, size_t offset = 0,size_t block_nums=1) {
             size_t dimSize = tensor.shape[level];
-            for (size_t i = 0; i < dimSize; ++i) {
-                if (level < tensor.dims - 1) {
-                    os << "[";
-                    block_nums++;
-                    block_nums=printTensor(os, tensor, level + 1, offset + i * tensor.strides[level],block_nums);
-                    block_nums--;
-                    os << "]";
-                    if (i < dimSize - 1) {
-                        os << ", ";
-                        os << std::endl;
-                        for(int l=0;l<block_nums;l++){
-                            os<<" ";
+            if(typeid(bool) != typeid(T)){
+                for (size_t i = 0; i < dimSize; ++i) {
+                    if (level < tensor.dims - 1) {
+                        os << "[";
+                        block_nums++;
+                        block_nums = printTensor(os, tensor, level + 1, offset + i * tensor.strides[level], block_nums);
+                        block_nums--;
+                        os << "]";
+                        if (i < dimSize - 1) {
+                            os << ", ";
+                            os << std::endl;
+                            for (int l = 0; l < block_nums; l++) {
+                                os << " ";
+                            }
+                        }
+                    } else {
+                        os << tensor.data.get()[i + offset];
+                        if (i < dimSize - 1) {
+                            os << ", ";
                         }
                     }
-                } else {
-                    os << tensor.data.get()[i + offset];
-                    if (i < dimSize - 1) {
-                        os << ", ";
+                }
+            } else {
+                for (size_t i = 0; i < dimSize; ++i) {
+                    if (level < tensor.dims - 1) {
+                        os << std::boolalpha << "[";
+                        block_nums++;
+                        block_nums = printTensor(os, tensor, level + 1, offset + i * tensor.strides[level], block_nums);
+                        block_nums--;
+                        os << std::boolalpha << "]";
+                        if (i < dimSize - 1) {
+                            os << std::boolalpha << ", ";
+                            os << std::boolalpha << std::endl;
+                            for (int l = 0; l < block_nums; l++) {
+                                os << std::boolalpha << " ";
+                            }
+                        }
+                    } else {
+                        os << std::boolalpha << tensor.data.get()[i + offset];
+                        if (i < dimSize - 1) {
+                            os << std::boolalpha << ", ";
+                        }
                     }
                 }
             }
@@ -1349,7 +1641,7 @@ namespace ts {
             }
             return result;
         }
+
+        friend broadcast_tensor<T>;
     };
-
-
 }// namespace ts

@@ -3,3 +3,9 @@
 3630	3749	7273966033095914	cuda_project.exe	486e6e9d968e0580
 1	2756	7273966023405105	CMakeFiles/cuda_project.dir/test.cu.obj	2723785f5d69be01
 2756	3630	7273966032241541	CMakeFiles/cuda_project.dir/cmake_device_link.obj	7c7a78c4540581af
+0	2852	7274527454055249	CMakeFiles/cuda_project.dir/test.cu.obj	2723785f5d69be01
+2852	3703	7274527462626156	CMakeFiles/cuda_project.dir/cmake_device_link.obj	7c7a78c4540581af
+3703	3975	7274527465105536	cuda_project.exe	486e6e9d968e0580
+0	2640	7274528882532922	CMakeFiles/cuda_project.dir/test.cu.obj	2723785f5d69be01
+2640	3437	7274528890571426	CMakeFiles/cuda_project.dir/cmake_device_link.obj	7c7a78c4540581af
+3437	3555	7274528891414442	cuda_project.exe	486e6e9d968e0580
