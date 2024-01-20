@@ -974,7 +974,7 @@ namespace ts {
         }
 
         static Tensor<T> openMp_matrix_mul(const Tensor<T>&input,const Tensor<T>&other){
-            if(input.size!=other.size||input.dims!=2||other.dims!=2||input.shape[0]!=other.shape[1]||
+            if(input.dims!=2||other.dims!=2||input.shape[0]!=other.shape[1]||
                input.shape[1]!=other.shape[0]){
                 throw ShapeError("ShapeError: Shape does not match");
             }
@@ -999,7 +999,7 @@ namespace ts {
         }
 
         static Tensor<T> matrix_mul(const Tensor<T>&input,const Tensor<T>& other){
-            if(input.size!=other.size||input.dims!=2||other.dims!=2||input.shape[0]!=other.shape[1]||
+            if(input.dims!=2||other.dims!=2||input.shape[0]!=other.shape[1]||
                input.shape[1]!=other.shape[0]){
                 throw ShapeError("ShapeError: Shape does not match");
             }
