@@ -684,15 +684,13 @@ namespace ts {
         void operator=(Tensor<T> operand){
             size_t length = operand.shape.front();
             for(size_t i = 0; i < length; i++){
-                std::shared_ptr<T> dst_ptr = this->data[i];
-                std::shared_ptr<T> src_ptr = operand.data[i];
-                *dst_ptr = *src_ptr;
+                *(this->data[i]) = *(operand.data[i]);
             }
         }
 
         // 2.4 transpose & permutation
         //transpose
-        static Tensor<T> transpose(Tensor<T> tensor, int dim1, int dim2) {
+        static Tensor<T> transpose(Tensor<T> & tensor, int dim1, int dim2) {
             if(dim1 < 0 || dim2 < 0){
                 throw DimensionError("DimensionError: Cannot transpose on negative dimensions");
             }
@@ -700,8 +698,8 @@ namespace ts {
             newDimension[dim1] = tensor.shape[dim2];
             newDimension[dim2] = tensor.shape[dim1];
             Tensor<T> trans = Tensor<T>::zeros(newDimension);
+            std::vector<std::shared_ptr<T>> temp_ptr = tensor.data;
             for(size_t i = 0; i < trans.size; i++) {
-                std::shared_ptr<T> src_ptr = tensor.data[i];
                 size_t src_index = i;
                 size_t dst_index = 0;
                 for (size_t j = 0; j < tensor.strides.size(); ++j) {
@@ -715,8 +713,7 @@ namespace ts {
                         dst_index += coordinate * trans.strides[j];
                     }
                 }
-                std::shared_ptr<T> dst_ptr = trans.data[dst_index];
-                *dst_ptr = *src_ptr;
+                trans.data[dst_index] = tensor.data[i];
             }
             return trans;
         }
@@ -730,7 +727,6 @@ namespace ts {
             newDimension[dim2] = this->shape[dim1];
             Tensor<T> trans = Tensor<T>::zeros(newDimension);
             for(size_t i = 0; i < trans.size; i++) {
-                std::shared_ptr<T> src_ptr = this->data[i];
                 size_t src_index = i;
                 size_t dst_index = 0;
                 for (size_t j = 0; j < this->strides.size(); ++j) {
@@ -744,14 +740,13 @@ namespace ts {
                         dst_index += coordinate * trans.strides[j];
                     }
                 }
-                std::shared_ptr<T> dst_ptr = trans.data[dst_index];
-                *dst_ptr = *src_ptr;
+                trans.data[dst_index] = this->data[i];
             }
             return trans;
         }
 
         // permutation
-        static Tensor<T> permute(Tensor<T> tensor, const std::vector<int> & dim){
+        static Tensor<T> permute(Tensor<T> & tensor, const std::vector<size_t> & dim){
             std::vector<size_t> newDimension = tensor.shape;
             for(size_t i = 0; i < dim.size(); i++) {
                 if(dim[i] < 0){
@@ -761,7 +756,6 @@ namespace ts {
             }
             Tensor<T> trans = Tensor<T>::zeros(newDimension);
             for(size_t i = 0; i < trans.size; i++) {
-                std::shared_ptr<T> dst_ptr = trans.data[i];
                 size_t src_index = 0;
                 size_t dst_index = i;
                 for (size_t j = 0; j < trans.strides.size(); ++j) {
@@ -769,13 +763,12 @@ namespace ts {
                     dst_index %= trans.strides[j];
                     src_index += coordinate * tensor.strides[dim[j]];
                 }
-                std::shared_ptr<T> src_ptr = tensor.data[src_index];
-                *dst_ptr = *src_ptr;
+                trans.data[i] = tensor.data[src_index];
             }
             return trans;
         }
 
-        Tensor<T> permute(const std::vector<int> & dim){
+        Tensor<T> permute(const std::vector<size_t> & dim){
             std::vector<size_t> newDimension = this->shape;
             for(size_t i = 0; i < dim.size(); i++) {
                 if(dim[i] < 0){
@@ -785,7 +778,6 @@ namespace ts {
             }
             Tensor<T> trans = Tensor<T>::zeros(newDimension);
             for(size_t i = 0; i < trans.size; i++) {
-                std::shared_ptr<T> dst_ptr = trans.data[i];
                 size_t src_index = 0;
                 size_t dst_index = i;
                 for (size_t j = 0; j < trans.strides.size(); ++j) {
@@ -793,14 +785,13 @@ namespace ts {
                     dst_index %= trans.strides[j];
                     src_index += coordinate * this->strides[dim[j]];
                 }
-                std::shared_ptr<T> src_ptr = this->data[src_index];
-                *dst_ptr = *src_ptr;
+                trans.data[i] = this->data[src_index];
             }
             return trans;
         }
 
         // 2.5 view
-        static Tensor<T> view(Tensor<T> tensor, const std::vector<int> shape){
+        static Tensor<T> view(Tensor<T> & tensor, const std::vector<int> shape){
             std::vector<int> newDimension = shape;
             size_t full_size = 1;
             int reserve = -1;
@@ -879,6 +870,7 @@ namespace ts {
             Tensor<T> input = *(processed.tensor1);
             Tensor<T> other = *(processed.tensor2);
             Tensor<T> result = zeros(other.shape);
+#pragma omp parallel for
             for (size_t i = 0; i < result.size; ++i) {
                 *(result.data[i]) = *(input.data[i]) + static_cast<T>(*other.data[i]);
             }
@@ -890,6 +882,7 @@ namespace ts {
             Tensor<T> input = *(processed.tensor1);
             Tensor<T> other = *(processed.tensor2);
             Tensor<T> result = zeros(other.shape);
+#pragma omp parallel for
             for (size_t i = 0; i < result.size; ++i) {
                 *(result.data[i]) = *(input.data[i]) + static_cast<T>(*(other.data[i]));
             }
@@ -904,6 +897,7 @@ namespace ts {
 
         static Tensor<T> add(const Tensor<T>&input,const T& value){
             Tensor<T> result = zeros(input->shape);
+#pragma omp parallel for
             for (size_t i = 0; i < result.size; ++i) {
                 *(result.data[i])= *(input.data[i])+ value;
             }
@@ -912,6 +906,7 @@ namespace ts {
 
         Tensor<T> add(const T& value) const {
             Tensor<T> result = zeros(this->shape);
+#pragma omp parallel for
             for (size_t i = 0; i < result.size; ++i) {
                 *(result.data[i])= *(this->data[i]) + value;
             }
@@ -931,6 +926,7 @@ namespace ts {
             Tensor<T> input = *(processed.tensor1);
             Tensor<T> other = *(processed.tensor2);
             Tensor<T> result = zeros(other.shape);
+#pragma omp parallel for
             for (size_t i = 0; i < result.size; ++i) {
                 *(result.data[i]) = *(input.data[i]) - static_cast<T>(*(other.data[i]));
             }
@@ -942,6 +938,7 @@ namespace ts {
             Tensor<T> input = *(processed.tensor1);
             Tensor<T> other = *(processed.tensor2);
             Tensor<T> result = zeros(other.shape);
+#pragma omp parallel for
             for (size_t i = 0; i < result.size; ++i) {
                 *(result.data[i]) = *(input.data[i]) - static_cast<T>(*(other.data[i]));
             }
@@ -954,6 +951,7 @@ namespace ts {
 
         static Tensor<T> sub(const Tensor<T>& input,const T& value) {
             Tensor<T> result = zeros(input->shape);
+#pragma omp parallel for
             for (size_t i = 0; i < result.size; ++i) {
                 *(result.data[i]) = *(input->data[i]) - value;
             }
@@ -962,6 +960,7 @@ namespace ts {
 
         Tensor<T> sub(const T& value) const {
             Tensor<T> result = zeros(this->shape);
+#pragma omp parallel for
             for (size_t i = 0; i < result.size; ++i) {
                 *(result.data[i]) = *(this->data[i]) - value;
             }
@@ -999,8 +998,7 @@ namespace ts {
         }
 
         static Tensor<T> matrix_mul(const Tensor<T>&input,const Tensor<T>& other){
-            if(input.dims!=2||other.dims!=2||input.shape[0]!=other.shape[1]||
-               input.shape[1]!=other.shape[0]){
+            if(input.dims!=2||other.dims!=2||input.shape[1]!=other.shape[0]){
                 throw ShapeError("ShapeError: Shape does not match");
             }
             size_t rows = input.shape[0];
@@ -1023,6 +1021,24 @@ namespace ts {
             return matrix_mul(*this,other);
         }
 
+        static Tensor<T> mat_vec_mul(const Tensor<T>&input,const Tensor<T>& other){
+            if(input.dims!=2||other.dims!=1||input.shape[1]!=other.shape[0]){
+                throw ShapeError("ShapeError: Shape does not match");
+            }
+            size_t rows = input.shape[0];
+            size_t commonDim = input.shape[1];
+            Tensor<T> result = zeros({rows});
+#pragma omp parallel for
+            for (size_t i = 0; i < rows; ++i) {
+                T sum = 0;
+                for (size_t k = 0; k < commonDim; ++k) {
+                    sum += *(input.data[i * commonDim + k]) * *(other.data[k]);
+                }
+                *(result.data[i]) = sum;
+            }
+            return result;
+        }
+
         static Tensor<T> openMp_mul(const Tensor<T>&input,const Tensor<T>& other){
             Tensor<T> result = zeros(other.shape);
 #pragma omp parallel for
@@ -1031,6 +1047,10 @@ namespace ts {
             }
             return result;
         }
+        Tensor<T> openMp_mul(const Tensor<T>& other){
+            return openMp_mul(*this,other);
+        }
+
 
         static Tensor<T> noBroadcast_mul(const Tensor<T>&x,const Tensor<T>& y){
             Tensor<T> result = zeros(x.shape);
@@ -1093,6 +1113,7 @@ namespace ts {
             Tensor<T> input = *(processed.tensor1);
             Tensor<T> other = *(processed.tensor2);
             Tensor<T> result = zeros(other.shape);
+#pragma omp parallel for
             for (size_t i = 0; i < result.size; ++i) {
                 *(result.data[i]) =*(input.data[i]) / static_cast<T>(*(other.data[i]));
             }
@@ -1104,6 +1125,7 @@ namespace ts {
             Tensor<T> input = *(processed.tensor1);
             Tensor<T> other = *(processed.tensor2);
             Tensor<T> result = zeros(other.shape);
+#pragma omp parallel for
             for (size_t i = 0; i < result.size; ++i) {
                 *(result.data[i]) =*(input.data[i]) / static_cast<T>(*(other.data[i]));
             }
@@ -1118,6 +1140,7 @@ namespace ts {
 
         static Tensor<T> div(const Tensor<T>&input,const T& value){
             Tensor<T> result = zeros(input->shape);
+#pragma omp parallel for
             for (size_t i = 0; i < result.size; ++i) {
                 *(result.data[i])= *(input.data[i]) / value;
             }
@@ -1126,6 +1149,7 @@ namespace ts {
 
         Tensor<T> div(const T& value) const {
             Tensor<T> result = zeros(this->shape);
+#pragma omp parallel for
             for (size_t i = 0; i < result.size; ++i) {
                 *(result.data[i])= *(this->data[i]) / value;
             }
@@ -1139,6 +1163,7 @@ namespace ts {
         //log
         static Tensor<T> log(const Tensor<T>& tensor){
             Tensor<T> result = zeros(tensor.shape);
+#pragma omp parallel for
             for(size_t i=0;i<result.size;++i){
                 *(result.data[i]) = std::log(static_cast<T>(*(tensor.data[i])));
             }
@@ -1180,10 +1205,23 @@ namespace ts {
             return result;
         }
 
-        Tensor<T> sum( int dim) {
+        Tensor<T> sum(int dim) {
             return sum(*this,dim);
         }
 
+        static Tensor<T> sum(const Tensor<T>& tensor) {
+            size_t total = tensor.size;
+            T sum = *(tensor.data[0]);
+            for (size_t i = 1; i < total; ++i) {
+                sum += *(tensor.data[i]);
+            }
+            T temp[1] = {sum};
+            return Tensor<T>(temp);
+        }
+
+        Tensor<T> sum(){
+            return sum(*this);
+        }
 
         static Tensor<T> mean(const Tensor<T>& tensor, int dim) {
             // 获取 tensor 的形状和维度
@@ -1358,33 +1396,81 @@ namespace ts {
         }
 
         // 3.4 einsum
-        // /^[\s]*([a-zA-Z])[\s]*,[\s]*\1[\s]*->[\s]*$/
-        // /^[\s]*([a-zA-Z])[\s]*,[\s]*\1[\s]*->[\s]*\1[\s]*$/
-        // /^[\s]*([a-zA-Z]){2}[\s]*->[\s]*\1[\s]*$/
-        // /^[\s]*([a-zA-Z])[\s]*,[\s]*([a-zA-Z])[\s]*->[\s]*\1\2[\s]*$/
-        // /^[\s]*([a-zA-Z])([a-zA-Z])([a-zA-Z])[\s]*,[\s]*\1\3([a-zA-Z])[\s]*->[\s]*\1\2\4[\s]*$/
-        static Tensor<T> einsum(const std::string expression, const std::vector<Tensor<T>> tensors){
-            std::regex dot_pattern("[\\s]*([a-zA-Z])[\\s]*,[\\s]*\\1[\\s]*->[\\s]*");
+        static Tensor<T> einsum(const std::string expression, std::vector<Tensor<T>> tensors){
+            std::regex diagonal_pattern("[\\s]*([a-zA-Z])\\1[\\s]*->[\\s]*\\1[\\s]*");
+            std::regex transpose_pattern("[\\s]*([a-zA-Z])(?!\\1)([a-zA-Z])[\\s]*->[\\s]*\\2\\1[\\s]*");
+            std::regex permutation_pattern("[\\s]*\\.{3}([a-zA-Z])(?!\\1)([a-zA-Z])[\\s]*->[\\s]*\\.{3}\\2\\1[\\s]*");
+            std::regex reduced_sum_pattern("[\\s]*([a-zA-Z])(?!\\1)[a-zA-Z][\\s]*->[\\s]*");
+            std::regex reduced_sum_1_pattern("[\\s]*([a-zA-Z])(?!\\1)([a-zA-Z])[\\s]*->[\\s]*\\1[\\s]*");
+            std::regex reduced_sum_0_pattern("[\\s]*([a-zA-Z])(?!\\1)([a-zA-Z])[\\s]*->[\\s]*\\2[\\s]*");
             std::regex elementwise_pattern("[\\s]*([a-zA-Z])[\\s]*,[\\s]*\\1[\\s]*->[\\s]*\\1[\\s]*");
-            std::regex diagonal_pattern("[\\s]*([a-zA-Z]){2}[\\s]*->[\\s]*\\1[\\s]*");
-            std::regex outer_pattern("[\\s]*([a-zA-Z])[\\s]*,[\\s]*([a-zA-Z])[\\s]*->[\\s]*\\1\\2[\\s]*");
-            std::regex bmm_pattern("[\\s]*([a-zA-Z])([a-zA-Z])([a-zA-Z])[\\s]*,[\\s]*\\1\\3([a-zA-Z])[\\s]*->[\\s]*\\1\\2\\4[\\s]*");
+            std::regex mat_vec_pattern("[\\s]*([a-zA-Z])(?!\\1)([a-zA-Z])[\\s]*,[\\s]*\\2[\\s]*->[\\s]*\\1[\\s]*");
+            std::regex mat_mat_pattern("[\\s]*([a-zA-Z])(?!\\1)([a-zA-Z])[\\s]*,[\\s]*\\2(?!\\1|\\2)([a-zA-Z])[\\s]*->[\\s]*\\1\\3[\\s]*");
+            std::regex dot_pattern("[\\s]*([a-zA-Z])[\\s]*,[\\s]*\\1[\\s]*->[\\s]*");
+            std::regex pointwise_mul_reduce_sum("[\\s]*([a-zA-Z])(?!\\1)([a-zA-Z])[\\s]*,[\\s]*\\1\\2[\\s]*->[\\s]*");
+            std::regex outer_pattern("[\\s]*([a-zA-Z])[\\s]*,[\\s]*(?!\\1)([a-zA-Z])[\\s]*->[\\s]*\\1\\2[\\s]*");
+            std::regex bmm_pattern("[\\s]*([a-zA-Z])(?!\\1)([a-zA-Z])(?!\\2)([a-zA-Z])[\\s]*,[\\s]*\\1\\3(?!\\3)([a-zA-Z])[\\s]*->[\\s]*\\1\\2\\4[\\s]*");
+            std::regex bilinear_pattern("[\\s]*([a-zA-Z])(?!\\1)([a-zA-Z])[\\s]*,[\\s]*(?!\\1|\\2)([a-zA-Z])\\2(?!\\1|\\2|\\3)([a-zA-Z])[\\s]*,[\\s]*\\1\\4[\\s]*->[\\s]*\\1\\3[\\s]*");
+
+            std::regex single_input_pattern("[^,]*");
+            std::regex double_input_pattern("[^,]*,[^,]*");
+            std::regex trible_input_pattern("[^,]*,[^,]*,[^,]*");
             std::vector<size_t> test = {1};
-            if(tensors.size() < 1){
-                // throw exception
+            if(tensors.size() < 1 && std::regex_match(expression, single_input_pattern)){
+                // throw
                 throw EmptyVectorError("EmptyVectorError: Please input at least 1 tensor");
             }
             if(std::regex_match(expression, diagonal_pattern)){
                 //                std::cout << "diag match" << std::endl;
                 return Tensor<T>::diagonal(tensors[0]);
             }
-            if(tensors.size() < 2){
+            if(std::regex_match(expression, transpose_pattern)){
+                //                std::cout << "transpose match" << std::endl;
+                return tensors[0].transpose(0, 1);
+            }
+            if(std::regex_match(expression, permutation_pattern)){
+                //                std::cout << "permute match" << std::endl;
+                std::vector<size_t> shape = tensors[0].shape;
+                size_t end = shape.size() - 1;
+                std::vector<size_t> dims;
+                for(size_t i = 0; i < shape.size() - 2; i++){
+                    dims.push_back(i);
+                }
+                dims.push_back(end);
+                dims.push_back(end - 1);
+                return Tensor<T>::permute(tensors[0], dims);
+            }
+            if(std::regex_match(expression, reduced_sum_pattern)){
+                //                std::cout << "reduced sum match" << std::endl;
+                return Tensor<T>::sum(tensors[0]);
+            }
+            if(std::regex_match(expression, reduced_sum_0_pattern)){
+                //                std::cout << "reduced sum 0 match" << std::endl;
+                return Tensor<T>::sum(tensors[0], 0);
+            }
+            if(std::regex_match(expression, reduced_sum_1_pattern)){
+                //                std::cout << "reduced sum 1 match" << std::endl;
+                return Tensor<T>::sum(tensors[0], 1);
+            }
+            if(tensors.size() < 2 && std::regex_match(expression, double_input_pattern)){
                 // throw exception
-                throw ExpressionMismatchError("ExpressionMismatchError: Please input at least 2 tensors");
+                throw ExpressionMismatchError("ExpressionMismatchError: Numbers of input tensors cannot match the expression");
+            }
+            if(std::regex_match(expression, mat_vec_pattern)){
+                return Tensor<T>::mat_vec_mul(tensors[0], tensors[1]);
+            }
+            if(std::regex_match(expression, mat_mat_pattern)){
+                //                std::cout << "mat mul match" << std::endl;
+                return Tensor<T>::matrix_mul(tensors[0], tensors[1]);
             }
             if(std::regex_match(expression, dot_pattern)){
 //                std::cout << "dot match" << std::endl;
                 return Tensor<T>::dot(tensors[0], tensors[1]);
+            }
+            if(std::regex_match(expression, pointwise_mul_reduce_sum)){
+                //                std::cout << "pointwise mul match" << std::endl;
+                Tensor<T> temp = Tensor<T>::mul(tensors[0], tensors[1]);
+                return Tensor<T>::sum(temp);
             }
             if(std::regex_match(expression, elementwise_pattern)) {
                 //                std::cout << "element match" << std::endl;
@@ -1397,6 +1483,12 @@ namespace ts {
             if(std::regex_match(expression, bmm_pattern)){
 //                std::cout << "bmm match" << std::endl;
                 return bmm(tensors[0], tensors[1]);
+            }
+            if(tensors.size() < 3 && std::regex_match(expression, trible_input_pattern)){
+                throw ExpressionMismatchError("ExpressionMismatchError: Numbers of input tensors cannot match the expression");
+            }
+            if(std::regex_match(expression, bilinear_pattern)){
+                return bilinear(tensors[0], tensors[1], tensors[2]);
             }
             // throw exception no matches
             throw ExpressionNotSupportedError("ExpressionNotSupportedError: Expression not supported");
@@ -1514,8 +1606,36 @@ namespace ts {
             }
         }
 
+        static Tensor<T> bilinear(Tensor<T> t1, Tensor<T> t2, Tensor<T> t3){
+            if(t1.dims != 2 || t2.dims != 3 || t3.dims != 2){
+                throw ShapeError("ShapeError: Shape mismatch");
+            }
+            if(t1.shape[0] != t3.shape[0] || t1.shape[1] != t2.shape[1] || t2.shape[2] != t3.shape[1]){
+                throw ShapeError("ShapeError: Shape mismatch");
+            }
+            std::vector<size_t> newDimension;
+            newDimension.push_back(t1.shape[0]);
+            newDimension.push_back(t2.shape[0]);
+            Tensor<T> result = Tensor<T>::zeros(newDimension);
+            for(size_t i = 0; i < result.shape[0]; i++){
+                for(size_t j = 0; j < result.shape[1]; j++){
+                    size_t src_index = i * result.strides[0] + j * result.strides[1];
+                    T sum = 0;
+                    for(size_t k = 0; k < t1.shape[1]; k++){
+                        for(size_t l = 0; l < t2.shape[2]; l++){
+                            size_t x_index = i * t1.strides[0] + k * t1.strides[1];
+                            size_t A_index = j * t2.strides[0] + k * t2.strides[1] + l * t2.strides[2];
+                            size_t y_index = i * t3.strides[0] + l * t3.strides[1];
+                            sum += *(t1.data[x_index]) * (*(t2.data[A_index])) * (*(t3.data[y_index]));
+                        }
+                    }
+                    *(result.data[src_index]) = sum;
+                }
+            }
+            return result;
+        }
 
-        template <typename U>
+
         static void save(const Tensor<T>& tensor, const std::string& filename) {
             std::ofstream file(filename, std::ios::out | std::ios::binary);
             if (file.is_open()) {
@@ -1541,7 +1661,6 @@ namespace ts {
             }
         }
 
-        template <typename U>
         static Tensor<T> load(const std::string& filename) {
             std::ifstream file(filename, std::ios::in | std::ios::binary);
             if (file.is_open()) {
@@ -1561,11 +1680,12 @@ namespace ts {
                 for (size_t dim : shape) {
                     size *= dim;
                 }
-                std::shared_ptr<T> data(new T[size]);
-                file.read(reinterpret_cast<char*>(data.get()), size * sizeof(T));
-
+                std::vector<std::shared_ptr<T>> data(size);
+                for (auto& sharedPtr : data) {
+                    sharedPtr = std::make_shared<T>();
+                    file.read(reinterpret_cast<char*>(sharedPtr.get()), sizeof(T));
+                }
                 file.close();
-
                 return Tensor<T>(data, size, shape);
             } else {
                 throw OpenFileError("OpenFileError: Failed to open file: " + filename);
