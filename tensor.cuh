@@ -32,7 +32,7 @@ namespace ts {
         }
 
         const char* what() const noexcept override {
-            return message.c_str();
+                return message.c_str();
         }
     };
 
@@ -45,7 +45,7 @@ namespace ts {
         }
 
         const char* what() const noexcept override {
-            return message.c_str();
+                return message.c_str();
         }
     };
 
@@ -58,7 +58,7 @@ namespace ts {
         }
 
         const char* what() const noexcept override {
-            return message.c_str();
+                return message.c_str();
         }
     };
 
@@ -71,7 +71,7 @@ namespace ts {
         }
 
         const char* what() const noexcept override {
-            return message.c_str();
+                return message.c_str();
         }
     };
 
@@ -84,7 +84,7 @@ namespace ts {
         }
 
         const char* what() const noexcept override {
-            return message.c_str();
+                return message.c_str();
         }
     };
 
@@ -97,7 +97,7 @@ namespace ts {
         }
 
         const char* what() const noexcept override {
-            return message.c_str();
+                return message.c_str();
         }
     };
 
@@ -110,7 +110,7 @@ namespace ts {
         }
 
         const char* what() const noexcept override {
-            return message.c_str();
+                return message.c_str();
         }
     };
 
@@ -123,7 +123,7 @@ namespace ts {
         }
 
         const char* what() const noexcept override {
-            return message.c_str();
+                return message.c_str();
         }
     };
 
@@ -418,7 +418,7 @@ namespace ts {
 
         static Tensor<T> logspace(double start, double end, int steps, double base = 10){
             if(typeid(T) != typeid(double)) throw ExpressionNotSupportedError("ExpressionNotSupportedError: The function can only create double tensor");
-            Tensor<T> tensor = empty({steps});
+            Tensor<T> tensor = empty({(long long unsigned int)steps});
             double stride = (end - start) / (steps - 1);
             for(int i = 0; i < steps; i++){
                 double cur = pow(base, start + i * stride);
@@ -1778,7 +1778,7 @@ namespace ts {
                         unorderedMap[resultIndex] = *(tensor.data[i]) < unorderedMap[resultIndex] ? *(tensor.data[i]) : unorderedMap[resultIndex];
                     }
                 }else{
-                    unorderedMap[resultIndex]=tensor.data[i];
+                    unorderedMap[resultIndex]=*(tensor.data[i]);
                 }
             }
             for(auto P :unorderedMap){
